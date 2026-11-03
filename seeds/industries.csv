@@ -1,0 +1,16 @@
+code,name,sort_order
+IND01,Công nghệ thông tin,1
+IND02,Sản xuất – Cơ khí,2
+IND03,Kinh doanh – Bán hàng,3
+IND04,Tài chính – Kế toán,4
+IND05,Marketing – Truyền thông,5
+IND06,Logistics – Xuất nhập khẩu,6
+IND07,Giáo dục – Đào tạo,7
+IND08,Y tế – Dược,8
+IND09,Xây dựng – Bất động sản,9
+IND10,Dịch vụ – Nhà hàng – Khách sạn,10
+IND11,Nhân sự – Hành chính,11
+IND12,Điện – Điện tử,12
+IND13,Thiết kế – Nghệ thuật,13
+IND14,Nông nghiệp – Môi trường,14
+IND15,Biên phiên dịch,15

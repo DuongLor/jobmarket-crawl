@@ -1,0 +1,38 @@
+[project]
+name = "jobmarket-crawl"
+version = "0.1.0"
+description = "Crawl & thống kê thị trường tuyển dụng (dùng cá nhân)"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28",
+    "selectolax>=1.0",
+    "typer>=0.12",
+    "pandas>=2.2",
+    "streamlit>=1.50",
+    "plotly>=5.20",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["jobmarket*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Cách khai báo tham số chuẩn của typer
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

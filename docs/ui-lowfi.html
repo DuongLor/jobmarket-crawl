@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Low-fi HTML mockup cho CCareer Career Market Intelligence">
+  <title>CCareer · Career Market Intelligence — Low-fi Mockup</title>
+  <style>
+/* =========================================================
+   1. BASE / RESET
+   Low-fi foundation: grayscale surfaces, borders, spacing,
+   typography and basic responsive behavior.
+   ========================================================= */
+:root {
+  --canvas: #f3f4f6;
+  --surface: #ffffff;
+  --surface-muted: #f8f9fb;
+  --surface-soft: #eef0f3;
+  --line: #d9dde3;
+  --line-strong: #c4cad3;
+  --ink: #252a31;
+  --ink-soft: #555e6a;
+  --ink-muted: #7b8491;
+  --accent: #4b5563;
+  --accent-soft: #e7eaf0;
+  --success: #4e6558;
+  --success-bg: #edf3ef;
+  --warning: #806b42;
+  --warning-bg: #f6f2e9;
+  --danger: #805454;
+  --danger-bg: #f7eeee;
+  --sidebar-width: 252px;
+  --radius: 6px;
+  --radius-small: 4px;
+  --shadow: 0 1px 2px rgba(20, 26, 35, .04);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid #788597;
+  outline-offset: 2px;
+}
+
+/* =========================================================
+   2. APP SHELL / NAVIGATION
+   ========================================================= */
+.app-shell { min-height: 100vh; display: flex; }
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: #e9ebef;
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 10;
+}
+.brand-block { display: flex; align-items: center; gap: 11px; padding: 22px 20px 21px; border-bottom: 1px solid var(--line); }
+.brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid #8d96a2; border-radius: 5px; font-weight: 800; font-size: 18px; color: #3f4854; background: #f8f9fb; }
+.brand-name { font-size: 17px; letter-spacing: -.4px; font-weight: 750; line-height: 1.1; }
+.brand-subtitle { margin-top: 4px; font-size: 9px; color: var(--ink-muted); letter-spacing: 1.2px; font-weight: 700; }
+.workspace-label, .nav-group-title { padding: 19px 20px 7px; color: var(--ink-muted); font-size: 9px; letter-spacing: 1px; font-weight: 750; }
+.main-nav { padding: 0 10px; }
+.nav-link { width: 100%; border: 0; background: transparent; display: flex; align-items: center; gap: 10px; text-align: left; color: #59616d; min-height: 39px; border-radius: 4px; padding: 0 10px; margin: 2px 0; font-size: 12px; }
+.nav-link:hover { background: #f3f4f6; color: var(--ink); }
+.nav-link.active { background: #d9dde4; color: #202832; font-weight: 700; box-shadow: inset 3px 0 #636e7d; }
+.nav-icon { width: 19px; text-align: center; color: #6c7684; font-size: 16px; }
+.nav-code { margin-left: auto; color: #9098a3; font-size: 10px; font-variant-numeric: tabular-nums; }
+.phase-tag { margin-left: auto; border: 1px solid #c8cdd5; color: #78818d; background: #f1f2f5; padding: 2px 5px; border-radius: 3px; font-size: 9px; line-height: 1.2; font-weight: 700; letter-spacing: .3px; }
+.nav-count { margin-left: auto; min-width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: #d5d9df; color: #4e5865; font-size: 10px; font-weight: 700; }
+.nav-divider { height: 1px; background: var(--line); margin: 12px 7px 2px; }
+.nav-group-title { padding: 12px 10px 5px; }
+.sidebar-bottom { margin-top: auto; padding: 12px; }
+.environment-card { display: flex; gap: 9px; align-items: center; border: 1px solid #d0d5dc; border-radius: 5px; background: #f1f3f6; padding: 10px; }
+.environment-card strong, .user-mini strong { display: block; font-size: 11px; font-weight: 700; }
+.environment-card small, .user-mini small { display: block; font-size: 10px; color: var(--ink-muted); margin-top: 2px; }
+.status-dot, .tiny-dot { width: 7px; height: 7px; background: #87958c; border-radius: 50%; flex: 0 0 auto; }
+.user-mini { display: flex; align-items: center; gap: 9px; padding: 15px 3px 3px; margin-top: 10px; border-top: 1px solid var(--line); }
+.avatar { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #bdc4ce; background: #f7f8fa; color: #596370; border-radius: 50%; font-size: 10px; font-weight: 750; }
+.avatar-small { width: 27px; height: 27px; }
+.more-icon { margin-left: auto; color: #89929e; font-weight: 800; letter-spacing: 2px; }
+
+/* =========================================================
+   3. MAIN HEADER / CONTENT FOUNDATION
+   ========================================================= */
+.main-area { min-width: 0; width: calc(100% - var(--sidebar-width)); margin-left: var(--sidebar-width); }
+.topbar { height: 58px; padding: 0 28px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 8; }
+.breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--ink-muted); font-size: 11px; }
+.breadcrumb strong { color: var(--ink-soft); font-weight: 650; }
+.crumb-sep { color: #b4bac3; }
+.topbar-actions { display: flex; align-items: center; gap: 13px; color: var(--ink-muted); font-size: 11px; }
+.topbar-date strong { color: var(--ink-soft); font-weight: 700; }
+.icon-button { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 4px; color: var(--ink-soft); background: var(--surface); font-size: 14px; }
+.icon-button:hover { background: var(--surface-soft); }
+.content-area { max-width: 1600px; margin: 0 auto; padding: 20px 28px 24px; }
+.page { display: none; }
+.page.active { display: block; animation: page-in .16s ease-out; }
+@keyframes page-in { from { opacity: .75; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+.page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin: 4px 0 18px; }
+.eyebrow { display: block; color: var(--ink-muted); font-size: 9px; font-weight: 750; letter-spacing: 1px; margin-bottom: 5px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { font-size: 22px; letter-spacing: -.5px; line-height: 1.2; margin-bottom: 5px; font-weight: 720; }
+h2 { font-size: 14px; font-weight: 720; margin-bottom: 3px; }
+h3 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+.page-description { color: var(--ink-muted); margin: 0; font-size: 11px; }
+.heading-meta { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; white-space: nowrap; }
+.muted-meta { color: var(--ink-muted); font-size: 10px; }
+.heading-actions { display: flex; align-items: center; gap: 8px; }
+.role-chip { padding: 5px 8px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 4px; font-size: 10px; color: var(--ink-soft); }
+
+/* =========================================================
+   4. GLOBAL FILTER BAR
+   ========================================================= */
+.filter-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px 10px; margin-bottom: 22px; box-shadow: var(--shadow); }
+.filter-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.filter-panel-head > div { display: flex; align-items: center; gap: 10px; }
+.filter-panel-head .eyebrow { margin: 0; }
+.filter-retain-note { color: var(--ink-muted); font-size: 10px; }
+.text-button, .subtle-link { border: 0; background: transparent; padding: 2px 0; color: #596777; font-size: 10px; font-weight: 650; }
+.text-button:hover, .subtle-link:hover { text-decoration: underline; }
+.filter-grid { display: grid; grid-template-columns: repeat(6, minmax(100px, 1fr)); gap: 9px; }
+.filter-field { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.filter-field > span, .filter-field > label { color: var(--ink-muted); font-size: 10px; font-weight: 600; }
+.filter-field select, .filter-field input, .filter-field textarea, .queue-controls select, .queue-controls input, .row-action, .row-master, .table-search {
+  width: 100%; min-width: 0; height: 31px; border: 1px solid var(--line); background: #fff; color: var(--ink-soft); border-radius: 4px; padding: 0 8px; font-size: 11px;
+}
+.filter-field select:focus, .filter-field input:focus, .queue-controls select:focus, .queue-controls input:focus, .row-action:focus, .row-master:focus { border-color: #8994a3; outline: none; box-shadow: 0 0 0 2px #edf0f4; }
+.filter-state-line { display: flex; align-items: center; gap: 7px; color: var(--ink-muted); font-size: 9px; padding-top: 9px; }
+.filter-state-line .tiny-dot { width: 5px; height: 5px; background: #87958c; }
+
+/* =========================================================
+   5. PANELS / CARDS / NOTICES / METRICS
+   ========================================================= */
+.panel, .kpi-card, .summary-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.panel { padding: 15px; min-width: 0; }
+.panel-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.panel-header p { color: var(--ink-muted); font-size: 10px; margin: 0; }
+.panel-footnote, .table-footnote { color: var(--ink-muted); font-size: 10px; margin-top: 11px; padding-top: 9px; border-top: 1px solid #eceef1; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 10px; }
+.section-heading p { margin: 0; color: var(--ink-muted); font-size: 10px; }
+.unit-label, .chart-unit { color: var(--ink-muted); font-size: 9px; letter-spacing: .4px; }
+.notice { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; margin-bottom: 17px; color: var(--ink-soft); font-size: 10px; background: #f5f6f8; }
+.notice strong { color: var(--ink); }
+.notice-symbol { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 16px; border: 1px solid #c4cbd4; border-radius: 50%; font-size: 10px; font-weight: 750; margin-top: 1px; }
+.notice-neutral { background: #f5f6f8; }
+.notice-warning { background: var(--warning-bg); border-color: #e4ddce; }
+.notice-warning .notice-symbol { border-color: #b9a987; color: var(--warning); }
+.notice-close { border: 0; background: transparent; color: var(--ink-muted); margin-left: auto; font-size: 17px; line-height: 1; }
+.compact-notice { margin-top: 14px; margin-bottom: 0; }
+.compact-notice .button { margin-left: auto; flex: 0 0 auto; }
+.kpi-grid { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; margin-bottom: 13px; }
+.kpi-card { padding: 13px 14px 11px; min-height: 101px; }
+.kpi-label { color: var(--ink-muted); font-size: 10px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+.kpi-value { font-size: 24px; font-weight: 730; letter-spacing: -.7px; margin: 9px 0 4px; line-height: 1; font-variant-numeric: tabular-nums; }
+.kpi-value small { font-size: 11px; letter-spacing: 0; color: var(--ink-muted); font-weight: 550; }
+.kpi-foot { display: flex; gap: 5px; align-items: center; color: var(--ink-muted); font-size: 9px; }
+.help-dot { display: inline-grid; place-items: center; border: 1px solid #c8ced7; color: #77818e; width: 13px; height: 13px; border-radius: 50%; font-size: 9px; cursor: help; }
+.neutral-change { color: #677180; font-weight: 700; }
+.subtle-text { color: var(--ink-muted); }
+.change-up { color: #4e6a59; font-weight: 650; }
+.change-down { color: #896767; font-weight: 650; }
+.warning-number { color: #846e49 !important; }
+.reliability-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d8d2c5; background: #f6f3ec; color: #786a4d; border-radius: 20px; padding: 4px 8px; font-size: 10px; font-weight: 650; }
+.reliability-pill span { width: 6px; height: 6px; border-radius: 50%; background: #a18a5e; }
+
+/* =========================================================
+   6. DASHBOARD CHART LAYOUTS
+   ========================================================= */
+.dashboard-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 12px; }
+.dashboard-grid .panel { min-height: 245px; }
+.bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.bottom-grid .panel { min-height: 125px; }
+.horizontal-chart { display: flex; flex-direction: column; gap: 10px; padding: 2px 0; }
+.bar-row { display: grid; grid-template-columns: 160px minmax(25px,1fr) 28px; gap: 10px; align-items: center; font-size: 10px; }
+.bar-label { color: var(--ink-soft); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bar-row strong { text-align: right; font-size: 10px; font-variant-numeric: tabular-nums; }
+.bar-track, .salary-line { background: #edf0f3; height: 8px; border-radius: 2px; overflow: hidden; }
+.bar-track i, .salary-line i { display: block; height: 100%; background: #aab2be; border-radius: 2px; }
+.muted-track i { background: #c8cdd5; }
+.compact-chart { gap: 11px; }
+.compact-chart .bar-row { grid-template-columns: 90px minmax(20px,1fr) 25px; }
+.stacked-chart { height: 170px; display: flex; align-items: flex-end; justify-content: space-around; gap: 10px; padding: 10px 5px 0; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to top, transparent 0, transparent 41px, #edf0f3 42px); }
+.stack-col { height: 100%; flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; color: var(--ink-muted); font-size: 9px; }
+.stack-value { color: var(--ink-soft); font-size: 9px; font-weight: 650; }
+.stack-bar { width: min(26px, 72%); max-height: 126px; min-height: 12px; background: #b9c1cb; position: relative; display: block; border-radius: 2px 2px 0 0; overflow: hidden; }
+.stack-bar i { position: absolute; left: 0; bottom: 0; width: 100%; display: block; background: #7f8b9b; border-top: 1px solid rgba(255,255,255,.6); }
+.chart-legend { display: flex; justify-content: center; gap: 18px; font-size: 9px; color: var(--ink-muted); padding-top: 10px; }
+.legend-box { display: inline-block; width: 8px; height: 8px; margin-right: 5px; background: #7f8b9b; border-radius: 1px; }
+.legend-box.secondary { background: #c4cbd4; }
+.salary-mini-chart { display: flex; flex-direction: column; gap: 9px; }
+.salary-mini-row { display: grid; grid-template-columns: 92px 1fr 28px; gap: 8px; align-items: center; font-size: 9px; }
+.salary-mini-row > span { color: var(--ink-soft); white-space: nowrap; }
+.salary-mini-row strong { font-size: 9px; text-align: right; }
+.salary-line { height: 7px; }
+.salary-line i { background: #98a3b1; }
+.preview-row { display: flex; align-items: center; gap: 11px; padding: 10px 0 2px; }
+.preview-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); background: var(--surface-muted); border-radius: 4px; font-size: 17px; color: var(--ink-muted); }
+.preview-row strong { font-size: 11px; }
+.preview-row p { color: var(--ink-muted); font-size: 9px; margin: 3px 0 0; max-width: 400px; }
+.status-label { display: inline-flex; border: 1px solid var(--line); border-radius: 3px; padding: 3px 6px; color: var(--ink-soft); background: #f6f7f9; font-size: 9px; white-space: nowrap; }
+.muted-status { color: #7f8792; background: #f3f4f6; }
+.large-tag { font-size: 9px; padding: 4px 7px; }
+.quality-mini-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin: 13px 0 10px; }
+.quality-mini-metrics div { display: flex; flex-direction: column; gap: 2px; }
+.quality-mini-metrics strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.quality-mini-metrics span { font-size: 9px; color: var(--ink-muted); }
+.thin-progress, .progress-track { height: 7px; background: #edf0f3; border-radius: 2px; overflow: hidden; }
+.thin-progress i, .progress-track i { display: block; height: 100%; background: #9da9b7; }
+.method-footer { padding: 13px 2px 0; margin-top: 16px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 9px; line-height: 1.5; }
+
+/* =========================================================
+   7. TABLES / TABS / CONTROLS
+   ========================================================= */
+.button { display: inline-flex; align-items: center; justify-content: center; min-height: 31px; border-radius: 4px; border: 1px solid var(--line-strong); padding: 0 10px; font-size: 10px; font-weight: 650; background: var(--surface); color: var(--ink-soft); white-space: nowrap; }
+.button:hover { background: #f2f4f6; }
+.button-primary { background: #687484; border-color: #687484; color: #fff; }
+.button-primary:hover { background: #566271; color: #fff; }
+.button-secondary { background: #fff; }
+.button-small { min-height: 25px; padding: 0 8px; font-size: 9px; }
+.metric-strip, .salary-summary-grid, .quality-summary-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 9px; margin-bottom: 14px; }
+.metric-strip > div, .summary-box { background: #fff; border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; }
+.metric-strip > div { display: flex; flex-direction: column; gap: 4px; }
+.metric-strip span, .summary-box > span { color: var(--ink-muted); font-size: 9px; }
+.metric-strip strong, .summary-box strong { font-size: 19px; font-weight: 730; font-variant-numeric: tabular-nums; }
+.salary-summary-grid, .quality-summary-grid { grid-template-columns: repeat(4,1fr); }
+.summary-box { display: flex; flex-direction: column; gap: 2px; min-height: 76px; }
+.summary-box strong { margin-top: 4px; }
+.summary-box small { color: var(--ink-muted); font-size: 9px; }
+.tab-panel { padding: 0; overflow: hidden; }
+.tab-list { display: flex; align-items: stretch; gap: 0; padding: 0 15px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab-button { min-height: 43px; padding: 0 13px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--ink-muted); white-space: nowrap; font-size: 10px; font-weight: 650; }
+.tab-button:hover { color: var(--ink); }
+.tab-button.active { color: var(--ink); border-bottom-color: #687484; }
+.tab-count { display: inline-grid; place-items: center; min-width: 17px; height: 17px; border-radius: 9px; background: #e7eaf0; color: #5e6978; font-size: 9px; margin-left: 4px; }
+.tab-content { display: none; padding: 15px; }
+.tab-content.active { display: block; }
+.table-panel-header { align-items: center; }
+.table-tools { display: flex; gap: 8px; align-items: center; }
+.table-search { width: 165px; }
+.table-wrap { overflow: auto; border: 1px solid #e3e6eb; border-radius: 4px; }
+table { width: 100%; border-collapse: collapse; font-size: 10px; min-width: 690px; }
+th, td { padding: 9px 10px; border-bottom: 1px solid #e9ebef; text-align: left; vertical-align: middle; }
+th { background: #f5f6f8; color: #66707d; font-size: 9px; font-weight: 700; white-space: nowrap; }
+th small { display: block; color: #939ba6; font-size: 8px; font-weight: 500; margin-top: 2px; }
+td { color: #4d5662; }
+td strong { color: var(--ink); font-weight: 680; }
+td small { display: block; margin-top: 3px; font-size: 9px; color: var(--ink-muted); }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: #fafbfc; }
+.numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.total-row td { background: #f4f5f7; font-weight: 750; color: var(--ink); }
+.unclassified-row td { background: #faf8f3; }
+.low-sample-row td { background: #fafafa; }
+.muted-cell { color: #9aa1aa; font-style: italic; }
+.pass-value { color: #53695c; font-weight: 650; }
+.heatmap-wrap table { min-width: 1000px; }
+.heatmap-table th:first-child, .heatmap-table td:first-child { min-width: 190px; }
+.heatmap-table td:not(:first-child) { text-align: center; font-variant-numeric: tabular-nums; }
+.heat-1 { background: #f1f3f6; }.heat-2 { background: #e4e8ee; }.heat-3 { background: #d6dde6; }.heat-4 { background: #c7d0dc; }.heat-5 { background: #b6c2d0; }
+.heat-legend { display: flex; align-items: center; gap: 5px; justify-content: flex-end; color: var(--ink-muted); font-size: 9px; margin-top: 10px; }
+.heat-swatch { width: 13px; height: 10px; display: inline-block; border: 1px solid #e0e3e8; }.heat-swatch.s1 { background: #f1f3f6; }.heat-swatch.s2 { background: #e4e8ee; }.heat-swatch.s3 { background: #d6dde6; }.heat-swatch.s4 { background: #b6c2d0; }
+
+/* =========================================================
+   8. SALARY DETAIL / QUALITY SCREEN
+   ========================================================= */
+.salary-visual-list { border-top: 1px solid #eceef1; margin-top: 14px; padding-top: 13px; max-width: 690px; }
+.salary-visual-title { color: var(--ink-muted); font-size: 9px; font-weight: 700; margin-bottom: 9px; }
+.salary-visual-row { display: grid; grid-template-columns: 140px 1fr 40px; gap: 9px; align-items: center; font-size: 9px; margin: 7px 0; }
+.salary-visual-row span { color: var(--ink-soft); }.salary-visual-row div { background: #edf0f3; height: 8px; border-radius: 2px; }.salary-visual-row i { display: block; height: 100%; background: #9aa5b3; border-radius: 2px; }.salary-visual-row b { text-align: right; font-size: 9px; }
+.salary-type-layout { display: grid; grid-template-columns: 210px 1fr; gap: 25px; align-items: center; padding: 12px 10px 20px; }
+.donut-placeholder { width: 170px; height: 170px; border-radius: 50%; border: 27px solid #d8dde4; border-top-color: #7f8b9b; border-right-color: #a8b2bf; border-bottom-color: #c0c8d2; display: grid; place-items: center; margin: 0 auto; }
+.donut-placeholder div { display: flex; flex-direction: column; align-items: center; }.donut-placeholder strong { font-size: 23px; }.donut-placeholder span { color: var(--ink-muted); font-size: 9px; }
+.salary-type-legend { display: grid; gap: 11px; max-width: 500px; }.salary-type-legend div { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: center; font-size: 10px; color: var(--ink-soft); }.salary-type-legend strong { color: var(--ink); font-size: 10px; }
+.type-dot { width: 9px; height: 9px; border-radius: 2px; background: #7f8b9b; }.type-up { background: #a8b2bf; }.type-from { background: #c0c8d2; }.type-fixed { background: #909ba9; }.type-negotiable { background: #d0d5dc; }.type-none { background: #e8ebef; }
+.quality-summary-grid { grid-template-columns: repeat(4,1fr); }
+.success-status { color: #52675a; background: #f0f4f1; border-color: #d4dfd7; }.pending-status { color: #766744; background: #f7f4ed; border-color: #e5dece; }.mapped-status { color: #53675a; background: #eef3ef; border-color: #d6e0d8; }.ignored-status { color: #777f89; background: #f2f3f5; }
+.quality-progress-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin-top: 13px; }
+.quality-progress-card { padding: 11px; border: 1px solid #e3e6eb; border-radius: 4px; }.quality-progress-card > div:first-child { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 9px; }.quality-progress-card span { color: var(--ink-muted); font-size: 9px; }.quality-progress-card strong { font-size: 14px; }.quality-progress-card small { display: block; margin-top: 7px; color: var(--ink-muted); font-size: 9px; }
+.flag-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid #eceef1; }.flag-grid { display: grid; grid-template-columns: repeat(6,1fr); gap: 8px; }.flag-grid div { padding: 9px; border: 1px solid #e5e8ed; background: #fafbfc; border-radius: 4px; display: flex; flex-direction: column; gap: 5px; }.flag-grid span { font-size: 9px; color: var(--ink-muted); }.flag-grid strong { font-size: 16px; }
+.queue-summary-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 12px; }.queue-summary-row h3 { margin-bottom: 3px; }.queue-summary-row p { margin: 0; color: var(--ink-muted); font-size: 10px; }.queue-summary-numbers { display: flex; gap: 14px; color: var(--ink-muted); font-size: 9px; white-space: nowrap; }.queue-summary-numbers strong { color: var(--ink); font-size: 17px; margin-right: 3px; }
+.queue-controls { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 13px 0; }.queue-filter-group { display: grid; grid-template-columns: 140px 145px 200px; gap: 8px; }.queue-filter-group label { display: flex; flex-direction: column; gap: 4px; font-size: 9px; color: var(--ink-muted); }.queue-controls select, .queue-controls input { height: 30px; }.queue-search-label { min-width: 150px; }
+#mapping-queue-table { min-width: 1100px; }#mapping-queue-table td { padding: 7px 8px; }#mapping-queue-table .row-action { min-width: 150px; height: 28px; font-size: 9px; }#mapping-queue-table .row-master { min-width: 145px; height: 28px; font-size: 9px; }.type-label { display: inline-flex; padding: 3px 5px; background: #f1f3f6; border: 1px solid #e0e4e9; border-radius: 3px; color: #697381; font-size: 9px; white-space: nowrap; }
+#mapping-log-table { min-width: 1200px; }#mapping-log-table td { font-size: 9px; }
+
+/* =========================================================
+   9. PHASE GATE / MODALS / FOOTER / FEEDBACK
+   ========================================================= */
+.phase-gate { max-width: 760px; margin: 36px auto 70px; padding: 32px; border: 1px dashed #c4cbd4; border-radius: 6px; background: #fafbfc; text-align: center; }
+.phase-gate-icon { width: 46px; height: 46px; margin: 0 auto 15px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--ink-muted); font-size: 23px; }.phase-gate h2 { font-size: 17px; margin-bottom: 8px; }.phase-gate p { max-width: 570px; margin: 0 auto; color: var(--ink-muted); font-size: 11px; }.gate-checks { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin-top: 18px; }.gate-checks span { padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink-muted); font-size: 9px; background: #fff; }.report-preview-card { margin: 23px auto 0; max-width: 520px; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 13px; background: #fff; border: 1px solid var(--line); border-radius: 5px; text-align: left; }.report-preview-card strong, .report-preview-card span:not(.status-label) { display: block; }.report-preview-card strong { font-size: 11px; }.report-preview-card span:not(.status-label) { color: var(--ink-muted); font-size: 9px; margin-top: 4px; }
+.app-footer { display: flex; justify-content: space-between; gap: 10px; color: #929aa5; font-size: 9px; padding: 26px 2px 3px; }
+.modal-dialog { width: min(560px, calc(100% - 28px)); max-width: 560px; padding: 0; border: 1px solid var(--line-strong); border-radius: 7px; box-shadow: 0 15px 50px rgba(30,38,48,.18); color: var(--ink); }.modal-dialog::backdrop { background: rgba(30,36,45,.28); }.modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 17px 19px 13px; border-bottom: 1px solid var(--line); }.modal-header h2 { font-size: 16px; margin: 0; }.modal-content { padding: 15px 19px; max-height: 60vh; overflow: auto; }.method-item { padding: 9px 0; border-bottom: 1px solid #eceef1; }.method-item:last-child { border-bottom: 0; }.method-item strong { font-size: 11px; }.method-item p { color: var(--ink-muted); font-size: 10px; margin: 4px 0 0; }.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 19px; border-top: 1px solid var(--line); background: #fafbfc; }.modal-field textarea { height: auto; min-height: 75px; resize: vertical; padding: 8px; }.form-hint { margin: 7px 0 0; color: var(--ink-muted); font-size: 9px; }
+.toast { position: fixed; right: 24px; bottom: 22px; z-index: 30; background: #333d49; color: #fff; border-radius: 5px; padding: 10px 13px; font-size: 11px; box-shadow: 0 4px 14px rgba(0,0,0,.15); opacity: 0; transform: translateY(8px); pointer-events: none; transition: .18s ease; }.toast.show { opacity: 1; transform: translateY(0); }
+
+/* =========================================================
+   10. RESPONSIVE LAYOUT
+   ========================================================= */
+@media (max-width: 1200px) {
+  :root { --sidebar-width: 220px; }
+  .content-area { padding-left: 20px; padding-right: 20px; }
+  .filter-grid { grid-template-columns: repeat(3,minmax(120px,1fr)); }
+  .kpi-grid { grid-template-columns: repeat(3,1fr); }
+  .dashboard-grid { grid-template-columns: 1fr 1fr; }
+  .bar-row { grid-template-columns: 135px minmax(20px,1fr) 25px; }
+  .flag-grid { grid-template-columns: repeat(3,1fr); }
+}
+@media (max-width: 850px) {
+  :root { --sidebar-width: 64px; }
+  .sidebar { width: 64px; min-width: 64px; }
+  .brand-block { justify-content: center; padding: 16px 5px; }.brand-block > div:last-child, .workspace-label, .nav-link span:not(.nav-icon), .nav-group-title, .nav-divider, .sidebar-bottom { display: none; }
+  .main-nav { padding: 10px 6px; }.nav-link { justify-content: center; padding: 0; }.nav-icon { font-size: 18px; width: auto; }.nav-link.active { box-shadow: inset 0 -3px #636e7d; }
+  .topbar { padding: 0 16px; }.content-area { padding: 17px 14px; }
+  .page-heading { align-items: flex-start; flex-direction: column; gap: 10px; }.heading-meta { align-items: flex-start; }
+  .dashboard-grid, .bottom-grid { grid-template-columns: 1fr; }.dashboard-grid .panel { min-height: auto; }
+  .metric-strip { grid-template-columns: repeat(3,1fr); }.quality-progress-grid { grid-template-columns: repeat(2,1fr); }
+  .queue-controls { align-items: flex-start; flex-direction: column; }.queue-filter-group { grid-template-columns: repeat(2,minmax(120px,1fr)); width: 100%; }.queue-search-label { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  h1 { font-size: 19px; }.topbar-date { display: none; }.filter-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.filter-retain-note { display: none; }
+  .kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.metric-strip { grid-template-columns: repeat(2,1fr); }.salary-summary-grid, .quality-summary-grid { grid-template-columns: repeat(2,1fr); }
+  .section-heading { align-items: flex-start; flex-direction: column; gap: 4px; }.bar-row { grid-template-columns: 105px minmax(20px,1fr) 25px; gap: 7px; }.bottom-grid { gap: 9px; }
+  .quality-progress-grid { grid-template-columns: 1fr 1fr; }.flag-grid { grid-template-columns: repeat(2,1fr); }.salary-type-layout { grid-template-columns: 1fr; }.donut-placeholder { width: 145px; height: 145px; }
+  .queue-filter-group { grid-template-columns: 1fr 1fr; }.table-tools { align-items: flex-end; flex-direction: column; }.table-search { width: 100%; }.app-footer { flex-direction: column; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Điều hướng chính">
+      <div class="brand-block">
+        <div class="brand-mark">C</div>
+        <div>
+          <div class="brand-name">CCareer</div>
+          <div class="brand-subtitle">ADMIN CONSOLE</div>
+        </div>
+      </div>
+
+      <div class="workspace-label">MARKET INTELLIGENCE</div>
+      <nav class="main-nav">
+        <button class="nav-link active" data-page="overview">
+          <span class="nav-icon">▦</span><span>Tổng quan</span><span class="nav-code">01</span>
+        </button>
+        <button class="nav-link" data-page="demand">
+          <span class="nav-icon">▤</span><span>Nhu cầu tuyển dụng</span><span class="nav-code">02</span>
+        </button>
+        <button class="nav-link" data-page="salary">
+          <span class="nav-icon">＄</span><span>Phân tích lương</span><span class="nav-code">03</span>
+        </button>
+        <div class="nav-divider"></div>
+        <div class="nav-group-title">ĐANG ĐỀ XUẤT</div>
+        <button class="nav-link future-link" data-page="trends">
+          <span class="nav-icon">⌁</span><span>Xu hướng & kỹ năng</span><span class="phase-tag">P2</span>
+        </button>
+        <button class="nav-link future-link" data-page="reports">
+          <span class="nav-icon">▧</span><span>Báo cáo định kỳ</span><span class="phase-tag">P2</span>
+        </button>
+        <button class="nav-link future-link" data-page="compare">
+          <span class="nav-icon">⇄</span><span>Việt Nam – Nhật Bản</span><span class="phase-tag">P3</span>
+        </button>
+        <div class="nav-divider"></div>
+        <div class="nav-group-title">QUẢN TRỊ DỮ LIỆU</div>
+        <button class="nav-link" data-page="quality">
+          <span class="nav-icon">◈</span><span>Chất lượng & ánh xạ</span><span class="nav-code">07</span>
+          <span class="nav-count" id="sidebar-unmapped-count">18</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="environment-card">
+          <span class="status-dot"></span>
+          <div><strong>Mockup environment</strong><small>Dữ liệu giả lập · v0.1</small></div>
+        </div>
+        <div class="user-mini">
+          <div class="avatar">BA</div>
+          <div><strong>Market Intelligence</strong><small>Quản trị viên</small></div>
+          <span class="more-icon">···</span>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumb"><span>CCareer</span><span class="crumb-sep">/</span><strong>Career Market Intelligence</strong></div>
+        <div class="topbar-actions">
+          <span class="topbar-date">Dữ liệu chốt: <strong>31/10/2026</strong></span>
+          <button class="icon-button" id="method-open" aria-label="Xem phương pháp">ⓘ</button>
+          <div class="avatar avatar-small">BA</div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <section class="filter-panel" aria-label="Bộ lọc dùng chung">
+          <div class="filter-panel-head">
+            <div><span class="eyebrow">BỘ LỌC PHÂN TÍCH</span><span class="filter-retain-note">Giữ nguyên khi chuyển màn hình</span></div>
+            <button class="text-button" id="clear-filters">Đặt lại bộ lọc</button>
+          </div>
+          <div class="filter-grid">
+            <label class="filter-field"><span>Khoảng thời gian</span>
+              <select id="filter-period"><option value="6m">6 tháng gần nhất</option><option value="30d">30 ngày gần nhất</option><option value="90d">90 ngày gần nhất</option><option value="12m">12 tháng gần nhất</option></select>
+            </label>
+            <label class="filter-field"><span>Nguồn dữ liệu</span>
+              <select id="filter-source"><option value="all">Tất cả nguồn</option><option value="topcv">TopCV</option><option value="vietnamworks">VietnamWorks</option></select>
+            </label>
+            <label class="filter-field"><span>Ngành</span>
+              <select id="filter-industry"><option value="all">Tất cả ngành</option><option>Công nghệ thông tin</option><option>Sản xuất – Cơ khí</option><option>Kinh doanh – Bán hàng</option><option>Marketing – Truyền thông</option><option>Logistics – Xuất nhập khẩu</option></select>
+            </label>
+            <label class="filter-field"><span>Địa phương</span>
+              <select id="filter-location"><option value="all">Tất cả địa phương</option><option>Hà Nội</option><option>Hồ Chí Minh</option><option>Đà Nẵng</option><option>Hải Phòng</option><option>Bình Dương</option><option>Bắc Ninh</option></select>
+            </label>
+            <label class="filter-field"><span>Kinh nghiệm</span>
+              <select id="filter-experience"><option value="all">Tất cả kinh nghiệm</option><option>Chưa có kinh nghiệm</option><option>Dưới 1 năm</option><option>1 – dưới 2 năm</option><option>2 – dưới 3 năm</option><option>3 – dưới 5 năm</option><option>Từ 5 năm trở lên</option></select>
+            </label>
+            <label class="filter-field"><span>Cấp bậc</span>
+              <select id="filter-role"><option value="all">Tất cả cấp bậc</option><option>Thực tập sinh</option><option>Nhân viên mới (Junior)</option><option>Nhân viên</option><option>Nhân viên cấp cao (Senior)</option><option>Trưởng nhóm</option><option>Quản lý / Trưởng phòng</option></select>
+            </label>
+          </div>
+          <div class="filter-state-line"><span class="tiny-dot"></span><span id="filter-state-text">Đang xem toàn bộ dữ liệu mẫu · Bộ lọc áp dụng xuyên suốt các màn hình</span></div>
+        </section>
+
+        <!-- SCR-01: OVERVIEW -->
+        <section class="page active" id="page-overview" data-title="Tổng quan">
+          <div class="page-heading">
+            <div><div class="eyebrow">SCR-01 · PHASE 1B</div><h1>Tổng quan thị trường tuyển dụng</h1><p class="page-description">Bức tranh nhu cầu tuyển dụng và mức lương đăng tuyển từ các nguồn dữ liệu đã thu thập.</p></div>
+            <div class="heading-meta"><span class="reliability-pill medium"><span></span>Độ tin cậy: Vừa</span><span class="muted-meta">Cập nhật lần cuối: 31/10/2026</span></div>
+          </div>
+
+          <div class="notice notice-neutral"><span class="notice-symbol">i</span><div><strong>Bản dữ liệu mô phỏng để đánh giá giao diện.</strong> Các con số lấy từ workbook mẫu; bộ lọc đang lưu lựa chọn khi chuyển màn hình nhưng chưa tính toán lại dữ liệu như hệ thống thật.</div><button class="notice-close" aria-label="Đóng">×</button></div>
+
+          <div class="section-heading"><div><h2>Chỉ số chính</h2><p>Phạm vi: tin duy nhất · 2 nguồn · chốt ngày 31/10/2026</p></div><span class="unit-label">ĐƠN VỊ: SỐ TIN, VND/THÁNG</span></div>
+          <div class="kpi-grid">
+            <article class="kpi-card"><div class="kpi-label">Tin duy nhất <span class="help-dot" title="Đã loại tin reject và bản trùng">?</span></div><div class="kpi-value">348</div><div class="kpi-foot"><span class="neutral-change">100%</span><span>tập dữ liệu phân tích</span></div></article>
+            <article class="kpi-card"><div class="kpi-label">Đang tuyển <span class="help-dot" title="Tin active và chưa quá hạn">?</span></div><div class="kpi-value">64</div><div class="kpi-foot"><span class="subtle-text">Stock tại ngày chốt</span></div></article>
+            <article class="kpi-card"><div class="kpi-label">Tin mới 30 ngày</div><div class="kpi-value">59</div><div class="kpi-foot"><span class="change-up">+7,3%</span><span>so với 30 ngày trước</span></div></article>
+            <article class="kpi-card"><div class="kpi-label">Số công ty</div><div class="kpi-value">71</div><div class="kpi-foot"><span class="subtle-text">Có tin trong tập dữ liệu</span></div></article>
+            <article class="kpi-card"><div class="kpi-label">Lương trung vị</div><div class="kpi-value">14,5 <small>triệu</small></div><div class="kpi-foot"><span class="subtle-text">n = 201 tin có lương số</span></div></article>
+            <article class="kpi-card"><div class="kpi-label">Tin có lương số</div><div class="kpi-value">57,8<small>%</small></div><div class="kpi-foot"><span class="subtle-text">201 / 348 tin duy nhất</span></div></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="panel panel-large">
+              <div class="panel-header"><div><h3>Nhu cầu theo ngành</h3><p>Số tin duy nhất theo ngành chuẩn</p></div><button class="subtle-link" data-go="demand">Xem chi tiết →</button></div>
+              <div class="horizontal-chart" id="dashboard-industry-chart">
+                <div class="bar-row"><span class="bar-label">Công nghệ thông tin</span><div class="bar-track"><i style="width:100%"></i></div><strong>75</strong></div>
+                <div class="bar-row"><span class="bar-label">Kinh doanh – Bán hàng</span><div class="bar-track"><i style="width:62.7%"></i></div><strong>47</strong></div>
+                <div class="bar-row"><span class="bar-label">Sản xuất – Cơ khí</span><div class="bar-track"><i style="width:53.3%"></i></div><strong>40</strong></div>
+                <div class="bar-row"><span class="bar-label">Marketing – Truyền thông</span><div class="bar-track"><i style="width:40%"></i></div><strong>30</strong></div>
+                <div class="bar-row"><span class="bar-label">Xây dựng – Bất động sản</span><div class="bar-track"><i style="width:30.7%"></i></div><strong>23</strong></div>
+                <div class="bar-row"><span class="bar-label">(Chưa phân loại)</span><div class="bar-track muted-track"><i style="width:22.7%"></i></div><strong>17</strong></div>
+              </div>
+              <div class="panel-footnote">Còn 7 ngành khác · Tổng số tin theo ngành bao gồm nhóm “chưa phân loại”.</div>
+            </article>
+            <article class="panel">
+              <div class="panel-header"><div><h3>Tin mới theo tháng</h3><p>6 tháng · tách theo nguồn</p></div><span class="chart-unit">Tin mới</span></div>
+              <div class="stacked-chart" aria-label="Biểu đồ cột số tin theo tháng">
+                <div class="stack-col"><div class="stack-value">52</div><div class="stack-bar" style="height:52%"><i style="height:57.7%"></i></div><span>05/26</span></div>
+                <div class="stack-col"><div class="stack-value">58</div><div class="stack-bar" style="height:58%"><i style="height:44.8%"></i></div><span>06/26</span></div>
+                <div class="stack-col"><div class="stack-value">64</div><div class="stack-bar" style="height:64%"><i style="height:35.9%"></i></div><span>07/26</span></div>
+                <div class="stack-col"><div class="stack-value">60</div><div class="stack-bar" style="height:60%"><i style="height:56.7%"></i></div><span>08/26</span></div>
+                <div class="stack-col"><div class="stack-value">52</div><div class="stack-bar" style="height:52%"><i style="height:55.8%"></i></div><span>09/26</span></div>
+                <div class="stack-col"><div class="stack-value">62</div><div class="stack-bar" style="height:62%"><i style="height:48.4%"></i></div><span>10/26</span></div>
+              </div>
+              <div class="chart-legend"><span><i class="legend-box primary"></i>TopCV</span><span><i class="legend-box secondary"></i>VietnamWorks</span></div>
+            </article>
+            <article class="panel">
+              <div class="panel-header"><div><h3>Nhu cầu theo địa phương</h3><p>Top địa phương theo số tin</p></div><button class="subtle-link" data-go="demand">Chi tiết →</button></div>
+              <div class="horizontal-chart compact-chart">
+                <div class="bar-row"><span class="bar-label">Hồ Chí Minh</span><div class="bar-track"><i style="width:100%"></i></div><strong>103</strong></div>
+                <div class="bar-row"><span class="bar-label">Hà Nội</span><div class="bar-track"><i style="width:93.2%"></i></div><strong>96</strong></div>
+                <div class="bar-row"><span class="bar-label">Bình Dương</span><div class="bar-track"><i style="width:30.1%"></i></div><strong>31</strong></div>
+                <div class="bar-row"><span class="bar-label">Bắc Ninh</span><div class="bar-track"><i style="width:23.3%"></i></div><strong>24</strong></div>
+                <div class="bar-row"><span class="bar-label">Đà Nẵng</span><div class="bar-track"><i style="width:22.3%"></i></div><strong>23</strong></div>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-header"><div><h3>Lương theo kinh nghiệm</h3><p>Trung vị · triệu VND/tháng</p></div><button class="subtle-link" data-go="salary">Phân tích lương →</button></div>
+              <div class="salary-mini-chart">
+                <div class="salary-mini-row"><span>Chưa có KN</span><div class="salary-line"><i style="width:22.4%"></i></div><strong>8,5</strong></div>
+                <div class="salary-mini-row"><span>Dưới 1 năm</span><div class="salary-line"><i style="width:23.7%"></i></div><strong>9,0</strong></div>
+                <div class="salary-mini-row"><span>1–2 năm</span><div class="salary-line"><i style="width:31.6%"></i></div><strong>12,0</strong></div>
+                <div class="salary-mini-row"><span>2–3 năm</span><div class="salary-line"><i style="width:42.1%"></i></div><strong>16,0</strong></div>
+                <div class="salary-mini-row"><span>3–5 năm</span><div class="salary-line"><i style="width:61.8%"></i></div><strong>23,5</strong></div>
+                <div class="salary-mini-row"><span>≥ 5 năm</span><div class="salary-line"><i style="width:100%"></i></div><strong>38,0</strong></div>
+              </div>
+              <div class="panel-footnote">Hiển thị trung vị khi n ≥ 5. Các mức lương là lương đăng tuyển.</div>
+            </article>
+          </div>
+
+          <div class="bottom-grid">
+            <article class="panel phase-preview">
+              <div class="panel-header"><div><h3>Xu hướng ngành</h3><p>Thiết kế chờ Phase 2A · yêu cầu ≥ 6 tháng dữ liệu liên tục</p></div><span class="phase-tag large-tag">PHASE 2</span></div>
+              <div class="preview-row"><span class="preview-icon">⌁</span><div><strong>Chưa đủ điều kiện kết luận xu hướng</strong><p>Chỉ so sánh 3 tháng gần nhất với 3 tháng liền trước khi đủ khối lượng và cùng phạm vi crawl.</p></div><span class="status-label muted-status">Chưa đủ dữ liệu</span></div>
+            </article>
+            <article class="panel data-quality-mini">
+              <div class="panel-header"><div><h3>Chất lượng dữ liệu</h3><p>Một số chỉ số cần theo dõi</p></div><button class="subtle-link" data-go="quality">Mở SCR-07 →</button></div>
+              <div class="quality-mini-metrics"><div><strong>95,1%</strong><span>Phủ ngành</span></div><div><strong>88,2%</strong><span>Phủ nghề</span></div><div><strong>17</strong><span>Tin chưa phân loại</span></div></div>
+              <div class="thin-progress"><i style="width:95.1%"></i></div>
+            </article>
+          </div>
+          <div class="method-footer">Nguồn: TopCV, VietnamWorks · Đơn vị: số tin tuyển dụng duy nhất · Lương: VND/tháng, chưa phân biệt Gross/Net · Số liệu mẫu không đại diện toàn bộ thị trường lao động.</div>
+        </section>
+
+        <!-- SCR-02: DEMAND -->
+        <section class="page" id="page-demand" data-title="Nhu cầu tuyển dụng">
+          <div class="page-heading"><div><div class="eyebrow">SCR-02 · PHASE 1B</div><h1>Nhu cầu tuyển dụng</h1><p class="page-description">Phân tích phân bổ tin tuyển dụng theo ngành, địa phương và thời gian.</p></div><div class="heading-actions"><button class="button button-secondary" data-export="demand-industry-table">↓ Xuất CSV</button></div></div>
+          <div class="metric-strip"><div><span>Tổng tin duy nhất</span><strong>348</strong></div><div><span>Tin đang tuyển</span><strong>64</strong></div><div><span>Tin mới 30 ngày</span><strong>59</strong></div><div><span>Δ so 30 ngày trước</span><strong class="change-up">+7,3%</strong></div><div><span>Chưa phân loại ngành</span><strong class="warning-number">17</strong></div></div>
+          <div class="panel tab-panel">
+            <div class="tab-list" role="tablist" aria-label="Kiểu phân tích nhu cầu">
+              <button class="tab-button active" data-tab-group="demand" data-tab="industry">Theo ngành</button>
+              <button class="tab-button" data-tab-group="demand" data-tab="location">Theo địa phương</button>
+              <button class="tab-button" data-tab-group="demand" data-tab="time">Theo thời gian</button>
+              <button class="tab-button" data-tab-group="demand" data-tab="heatmap">Bản đồ nhiệt</button>
+            </div>
+            <div class="tab-content active" data-tab-panel="demand-industry">
+              <div class="panel-header table-panel-header"><div><h3>Phân bổ theo ngành</h3><p>Mỗi tin chỉ thuộc một ngành; tổng các nhóm bằng tổng tin duy nhất.</p></div><div class="table-tools"><input class="table-search" data-search-table="demand-industry-table" placeholder="Tìm ngành..." aria-label="Tìm ngành"><button class="button button-secondary" data-export="demand-industry-table">Xuất CSV</button></div></div>
+              <div class="table-wrap"><table id="demand-industry-table"><thead><tr><th>Ngành</th><th class="numeric">Tổng tin</th><th class="numeric">Tỷ trọng</th><th class="numeric">Đang tuyển</th><th class="numeric">Mới 30 ngày</th><th class="numeric">30 ngày trước</th><th class="numeric">Δ% 30 ngày</th><th class="numeric">Hạng</th></tr></thead><tbody>
+                <tr><td><strong>Công nghệ thông tin</strong></td><td class="numeric">75</td><td class="numeric">21,6%</td><td class="numeric">22</td><td class="numeric">21</td><td class="numeric">9</td><td class="numeric"><span class="change-up">+133,3%</span></td><td class="numeric">1</td></tr>
+                <tr><td>Kinh doanh – Bán hàng</td><td class="numeric">47</td><td class="numeric">13,5%</td><td class="numeric">6</td><td class="numeric">5</td><td class="numeric">6</td><td class="numeric"><span class="change-down">−16,7%</span></td><td class="numeric">2</td></tr>
+                <tr><td>Sản xuất – Cơ khí</td><td class="numeric">40</td><td class="numeric">11,5%</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">7</td><td class="numeric"><span class="change-down">−71,4%</span></td><td class="numeric">3</td></tr>
+                <tr><td>Marketing – Truyền thông</td><td class="numeric">30</td><td class="numeric">8,6%</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">8</td><td class="numeric"><span class="change-down">−75,0%</span></td><td class="numeric">4</td></tr>
+                <tr><td>Xây dựng – Bất động sản</td><td class="numeric">23</td><td class="numeric">6,6%</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">4</td><td class="numeric"><span class="change-down">−50,0%</span></td><td class="numeric">5</td></tr>
+                <tr><td>Logistics – Xuất nhập khẩu</td><td class="numeric">22</td><td class="numeric">6,3%</td><td class="numeric">8</td><td class="numeric">9</td><td class="numeric">6</td><td class="numeric"><span class="change-up">+50,0%</span></td><td class="numeric">6</td></tr>
+                <tr><td>Giáo dục – Đào tạo</td><td class="numeric">20</td><td class="numeric">5,7%</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric"><span class="change-up">+50,0%</span></td><td class="numeric">7</td></tr>
+                <tr><td>Dịch vụ – Nhà hàng – Khách sạn</td><td class="numeric">19</td><td class="numeric">5,5%</td><td class="numeric">5</td><td class="numeric">4</td><td class="numeric">3</td><td class="numeric"><span class="change-up">+33,3%</span></td><td class="numeric">8</td></tr>
+                <tr><td>Tài chính – Kế toán</td><td class="numeric">17</td><td class="numeric">4,9%</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">0,0%</td><td class="numeric">9</td></tr>
+                <tr><td>Y tế – Dược</td><td class="numeric">17</td><td class="numeric">4,9%</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric">4</td><td class="numeric"><span class="change-down">−75,0%</span></td><td class="numeric">10</td></tr>
+                <tr><td>Điện – Điện tử</td><td class="numeric">11</td><td class="numeric">3,2%</td><td class="numeric">1</td><td class="numeric">1</td><td class="numeric">1</td><td class="numeric">0,0%</td><td class="numeric">11</td></tr>
+                <tr><td>Nhân sự – Hành chính</td><td class="numeric">10</td><td class="numeric">2,9%</td><td class="numeric">2</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric"><span class="change-up">+100,0%</span></td><td class="numeric">12</td></tr>
+                <tr class="unclassified-row"><td>(Chưa phân loại)</td><td class="numeric">17</td><td class="numeric">4,9%</td><td class="numeric">5</td><td class="numeric">5</td><td class="numeric">2</td><td class="numeric"><span class="change-up">+150,0%</span></td><td class="numeric">—</td></tr>
+                <tr class="total-row"><td>Tổng</td><td class="numeric">348</td><td class="numeric">100%</td><td class="numeric">64</td><td class="numeric">59</td><td class="numeric">55</td><td class="numeric">+7,3%</td><td class="numeric">—</td></tr>
+              </tbody></table></div>
+              <div class="table-footnote">Lưu ý: không loại 17 tin chưa ánh xạ ngành khỏi tổng. Mỗi tin chỉ được gán một ngành chuẩn.</div>
+            </div>
+            <div class="tab-content" data-tab-panel="demand-location">
+              <div class="panel-header table-panel-header"><div><h3>Phân bổ theo địa phương</h3><p>Một tin nhiều địa điểm hiện chỉ lấy địa điểm đầu tiên theo dữ liệu crawl.</p></div><div class="table-tools"><input class="table-search" data-search-table="demand-location-table" placeholder="Tìm địa phương..."><button class="button button-secondary" data-export="demand-location-table">Xuất CSV</button></div></div>
+              <div class="table-wrap"><table id="demand-location-table"><thead><tr><th>Địa phương</th><th class="numeric">Tổng tin</th><th class="numeric">Tỷ trọng</th><th class="numeric">Đang tuyển</th><th class="numeric">Mới 30 ngày</th><th class="numeric">Δ% 30 ngày</th><th class="numeric">Hạng</th></tr></thead><tbody>
+                <tr><td>Hồ Chí Minh</td><td class="numeric">103</td><td class="numeric">29,6%</td><td class="numeric">17</td><td class="numeric">17</td><td class="numeric"><span class="change-up">+6,3%</span></td><td class="numeric">1</td></tr>
+                <tr><td>Hà Nội</td><td class="numeric">96</td><td class="numeric">27,6%</td><td class="numeric">15</td><td class="numeric">13</td><td class="numeric"><span class="change-down">−18,8%</span></td><td class="numeric">2</td></tr>
+                <tr><td>Bình Dương</td><td class="numeric">31</td><td class="numeric">8,9%</td><td class="numeric">7</td><td class="numeric">7</td><td class="numeric"><span class="change-up">+133,3%</span></td><td class="numeric">3</td></tr>
+                <tr><td>Bắc Ninh</td><td class="numeric">24</td><td class="numeric">6,9%</td><td class="numeric">7</td><td class="numeric">6</td><td class="numeric"><span class="change-up">+200,0%</span></td><td class="numeric">4</td></tr>
+                <tr><td>Đà Nẵng</td><td class="numeric">23</td><td class="numeric">6,6%</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">0,0%</td><td class="numeric">5</td></tr>
+                <tr><td>Hải Phòng</td><td class="numeric">21</td><td class="numeric">6,0%</td><td class="numeric">4</td><td class="numeric">4</td><td class="numeric">0,0%</td><td class="numeric">6</td></tr>
+                <tr><td>Cần Thơ</td><td class="numeric">16</td><td class="numeric">4,6%</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">0,0%</td><td class="numeric">7</td></tr>
+                <tr><td>Đồng Nai</td><td class="numeric">16</td><td class="numeric">4,6%</td><td class="numeric">2</td><td class="numeric">1</td><td class="numeric"><span class="change-down">−75,0%</span></td><td class="numeric">8</td></tr>
+                <tr><td>Khánh Hòa</td><td class="numeric">9</td><td class="numeric">2,6%</td><td class="numeric">3</td><td class="numeric">3</td><td class="numeric">0,0%</td><td class="numeric">9</td></tr>
+                <tr><td>Quảng Ninh</td><td class="numeric">4</td><td class="numeric">1,1%</td><td class="numeric">1</td><td class="numeric">1</td><td class="numeric">—</td><td class="numeric">10</td></tr>
+                <tr class="unclassified-row"><td>(Chưa xác định)</td><td class="numeric">5</td><td class="numeric">1,4%</td><td class="numeric">1</td><td class="numeric">1</td><td class="numeric">0,0%</td><td class="numeric">—</td></tr>
+                <tr class="total-row"><td>Tổng</td><td class="numeric">348</td><td class="numeric">100%</td><td class="numeric">64</td><td class="numeric">59</td><td class="numeric">+7,3%</td><td class="numeric">—</td></tr>
+              </tbody></table></div>
+            </div>
+            <div class="tab-content" data-tab-panel="demand-time">
+              <div class="panel-header"><div><h3>Tin mới theo tháng</h3><p>Dựa trên event_date = ngày đăng; nếu thiếu thì dùng ngày hệ thống thấy tin lần đầu.</p></div><button class="button button-secondary" data-export="demand-time-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="demand-time-table"><thead><tr><th>Tháng</th><th class="numeric">Tổng tin mới</th><th class="numeric">TopCV</th><th class="numeric">VietnamWorks</th><th class="numeric">MoM</th></tr></thead><tbody>
+                <tr><td>05/2026</td><td class="numeric">52</td><td class="numeric">30</td><td class="numeric">22</td><td class="numeric">—</td></tr><tr><td>06/2026</td><td class="numeric">58</td><td class="numeric">26</td><td class="numeric">32</td><td class="numeric"><span class="change-up">+11,5%</span></td></tr><tr><td>07/2026</td><td class="numeric">64</td><td class="numeric">23</td><td class="numeric">41</td><td class="numeric"><span class="change-up">+10,3%</span></td></tr><tr><td>08/2026</td><td class="numeric">60</td><td class="numeric">34</td><td class="numeric">26</td><td class="numeric"><span class="change-down">−6,3%</span></td></tr><tr><td>09/2026</td><td class="numeric">52</td><td class="numeric">29</td><td class="numeric">23</td><td class="numeric"><span class="change-down">−13,3%</span></td></tr><tr><td>10/2026</td><td class="numeric">62</td><td class="numeric">30</td><td class="numeric">32</td><td class="numeric"><span class="change-up">+19,2%</span></td></tr>
+              </tbody></table></div>
+              <div class="notice notice-warning compact-notice"><span class="notice-symbol">!</span><div><strong>Thiên lệch sống sót.</strong> Tin trước ngày bắt đầu crawl chỉ còn tin chưa hết hạn. Không dùng giai đoạn backfill để kết luận xu hướng dài hạn.</div></div>
+            </div>
+            <div class="tab-content" data-tab-panel="demand-heatmap">
+              <div class="panel-header"><div><h3>Bản đồ nhiệt ngành × địa phương</h3><p>Số tin duy nhất của từng cặp ngành và tỉnh/thành.</p></div><button class="button button-secondary" data-export="demand-heatmap-table">Xuất CSV</button></div>
+              <div class="table-wrap heatmap-wrap"><table class="heatmap-table" id="demand-heatmap-table"><thead><tr><th>Ngành \ Địa phương</th><th>Hà Nội</th><th>Hồ Chí Minh</th><th>Đà Nẵng</th><th>Hải Phòng</th><th>Cần Thơ</th><th>Bình Dương</th><th>Đồng Nai</th><th>Bắc Ninh</th><th>Quảng Ninh</th><th>Khánh Hòa</th><th>Tổng</th></tr></thead><tbody>
+                <tr><td>Công nghệ thông tin</td><td class="heat-5">28</td><td class="heat-5">22</td><td class="heat-2">6</td><td class="heat-1">4</td><td>0</td><td class="heat-2">8</td><td class="heat-1">2</td><td class="heat-1">4</td><td>0</td><td class="heat-1">1</td><td><strong>75</strong></td></tr>
+                <tr><td>Sản xuất – Cơ khí</td><td class="heat-2">9</td><td class="heat-3">15</td><td class="heat-1">1</td><td class="heat-1">2</td><td class="heat-1">2</td><td class="heat-2">4</td><td class="heat-1">2</td><td class="heat-1">3</td><td>0</td><td class="heat-1">2</td><td><strong>40</strong></td></tr>
+                <tr><td>Kinh doanh – Bán hàng</td><td class="heat-2">9</td><td class="heat-3">10</td><td class="heat-1">2</td><td class="heat-2">5</td><td class="heat-1">2</td><td class="heat-2">6</td><td class="heat-1">3</td><td class="heat-2">8</td><td class="heat-1">2</td><td>0</td><td><strong>47</strong></td></tr>
+                <tr><td>Tài chính – Kế toán</td><td class="heat-2">6</td><td class="heat-2">6</td><td>0</td><td>0</td><td class="heat-1">2</td><td class="heat-1">1</td><td>0</td><td>0</td><td>0</td><td>0</td><td><strong>15</strong></td></tr>
+                <tr><td>Marketing – Truyền thông</td><td class="heat-2">8</td><td class="heat-2">7</td><td class="heat-1">2</td><td class="heat-1">4</td><td>0</td><td class="heat-1">1</td><td class="heat-1">3</td><td class="heat-1">1</td><td class="heat-1">1</td><td class="heat-1">3</td><td><strong>30</strong></td></tr>
+                <tr><td>Logistics – Xuất nhập khẩu</td><td class="heat-2">5</td><td class="heat-2">8</td><td class="heat-1">1</td><td>0</td><td class="heat-1">3</td><td class="heat-1">2</td><td>0</td><td class="heat-1">1</td><td class="heat-1">1</td><td>0</td><td><strong>21</strong></td></tr>
+                <tr><td>Giáo dục – Đào tạo</td><td class="heat-2">6</td><td class="heat-2">8</td><td>0</td><td class="heat-1">2</td><td>0</td><td class="heat-1">2</td><td class="heat-1">2</td><td>0</td><td>0</td><td>0</td><td><strong>20</strong></td></tr>
+                <tr><td>Y tế – Dược</td><td class="heat-1">3</td><td class="heat-2">5</td><td class="heat-1">2</td><td>0</td><td class="heat-1">2</td><td class="heat-1">2</td><td class="heat-1">2</td><td>0</td><td>0</td><td>0</td><td><strong>16</strong></td></tr>
+                <tr><td>Xây dựng – Bất động sản</td><td class="heat-2">7</td><td class="heat-2">6</td><td class="heat-1">2</td><td class="heat-1">1</td><td class="heat-1">2</td><td>0</td><td class="heat-1">1</td><td class="heat-1">3</td><td>0</td><td class="heat-1">1</td><td><strong>23</strong></td></tr>
+              </tbody></table></div>
+              <div class="heat-legend"><span>Ít</span><i class="heat-swatch s1"></i><i class="heat-swatch s2"></i><i class="heat-swatch s3"></i><i class="heat-swatch s4"></i><span>Nhiều</span></div>
+            </div>
+          </div>
+          <div class="method-footer">Nguồn: TopCV, VietnamWorks · Đơn vị: số tin tuyển dụng duy nhất · Tin nhiều địa điểm chỉ ghi nhận địa điểm đầu tiên · Nhãn chưa ánh xạ được giữ ở nhóm riêng.</div>
+        </section>
+
+        <!-- SCR-03: SALARY -->
+        <section class="page" id="page-salary" data-title="Phân tích lương">
+          <div class="page-heading"><div><div class="eyebrow">SCR-03 · PHASE 1B</div><h1>Phân tích lương đăng tuyển</h1><p class="page-description">So sánh mức lương theo kinh nghiệm, cấp bậc, địa phương và nghề.</p></div><div class="heading-actions"><button class="button button-secondary" data-export="salary-experience-table">↓ Xuất CSV</button></div></div>
+          <div class="notice notice-warning"><span class="notice-symbol">!</span><div><strong>Lưu ý về dữ liệu lương.</strong> Chỉ tính tin có mức lương dạng khoảng (range) hoặc cố định (fixed). Không trộn mức trần (up_to), mức sàn (from) và lương thỏa thuận vào thống kê. Gross/Net hiện chưa được phân biệt đầy đủ.</div></div>
+          <div class="salary-summary-grid">
+            <div class="summary-box"><span>Tổng tin duy nhất</span><strong>348</strong></div>
+            <div class="summary-box"><span>Tin có lương số</span><strong>201</strong><small>57,8% độ phủ</small></div>
+            <div class="summary-box"><span>Trung vị toàn bộ</span><strong>14,5 triệu</strong><small>VND/tháng · n = 201</small></div>
+            <div class="summary-box"><span>Ngưỡng hiển thị</span><strong>n ≥ 5</strong><small>min_n_salary</small></div>
+          </div>
+          <div class="panel tab-panel">
+            <div class="tab-list" role="tablist" aria-label="Phân tích lương theo nhóm">
+              <button class="tab-button active" data-tab-group="salary" data-tab="experience">Theo kinh nghiệm</button>
+              <button class="tab-button" data-tab-group="salary" data-tab="role">Theo cấp bậc</button>
+              <button class="tab-button" data-tab-group="salary" data-tab="location">Theo địa phương</button>
+              <button class="tab-button" data-tab-group="salary" data-tab="occupation">Theo nghề</button>
+              <button class="tab-button" data-tab-group="salary" data-tab="salary-type">Loại lương</button>
+            </div>
+            <div class="tab-content active" data-tab-panel="salary-experience">
+              <div class="panel-header table-panel-header"><div><h3>Lương theo số năm kinh nghiệm</h3><p>Đơn vị triệu VND/tháng · Trung vị ưu tiên hơn trung bình do phân phối lương lệch phải.</p></div><button class="button button-secondary" data-export="salary-experience-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="salary-experience-table"><thead><tr><th>Nhóm kinh nghiệm</th><th class="numeric">Số tin</th><th class="numeric">Tin có lương số (n)</th><th class="numeric">Độ phủ lương</th><th class="numeric">Trung bình</th><th class="numeric">Trung vị</th><th class="numeric">P25</th><th class="numeric">P75</th></tr></thead><tbody>
+                <tr><td>Chưa có kinh nghiệm</td><td class="numeric">59</td><td class="numeric">35</td><td class="numeric">59,3%</td><td class="numeric">9,21</td><td class="numeric"><strong>8,50</strong></td><td class="numeric">5,94</td><td class="numeric">12,00</td></tr>
+                <tr><td>Dưới 1 năm</td><td class="numeric">27</td><td class="numeric">13</td><td class="numeric">48,1%</td><td class="numeric">9,19</td><td class="numeric"><strong>9,00</strong></td><td class="numeric">7,00</td><td class="numeric">10,00</td></tr>
+                <tr><td>1 – dưới 2 năm</td><td class="numeric">69</td><td class="numeric">43</td><td class="numeric">62,3%</td><td class="numeric">12,92</td><td class="numeric"><strong>12,00</strong></td><td class="numeric">10,75</td><td class="numeric">15,00</td></tr>
+                <tr><td>2 – dưới 3 năm</td><td class="numeric">77</td><td class="numeric">42</td><td class="numeric">54,5%</td><td class="numeric">16,63</td><td class="numeric"><strong>16,00</strong></td><td class="numeric">13,50</td><td class="numeric">21,00</td></tr>
+                <tr><td>3 – dưới 5 năm</td><td class="numeric">75</td><td class="numeric">39</td><td class="numeric">52,0%</td><td class="numeric">24,38</td><td class="numeric"><strong>23,50</strong></td><td class="numeric">19,50</td><td class="numeric">29,50</td></tr>
+                <tr><td>Từ 5 năm trở lên</td><td class="numeric">32</td><td class="numeric">21</td><td class="numeric">65,6%</td><td class="numeric">38,70</td><td class="numeric"><strong>38,00</strong></td><td class="numeric">29,50</td><td class="numeric">47,00</td></tr>
+              </tbody></table></div>
+              <div class="salary-visual-list"><div class="salary-visual-title">So sánh trung vị theo kinh nghiệm</div><div class="salary-visual-row"><span>Chưa có kinh nghiệm</span><div><i style="width:22.4%"></i></div><b>8,5</b></div><div class="salary-visual-row"><span>Dưới 1 năm</span><div><i style="width:23.7%"></i></div><b>9,0</b></div><div class="salary-visual-row"><span>1 – dưới 2 năm</span><div><i style="width:31.6%"></i></div><b>12,0</b></div><div class="salary-visual-row"><span>2 – dưới 3 năm</span><div><i style="width:42.1%"></i></div><b>16,0</b></div><div class="salary-visual-row"><span>3 – dưới 5 năm</span><div><i style="width:61.8%"></i></div><b>23,5</b></div><div class="salary-visual-row"><span>Từ 5 năm trở lên</span><div><i style="width:100%"></i></div><b>38,0</b></div></div>
+            </div>
+            <div class="tab-content" data-tab-panel="salary-role">
+              <div class="panel-header"><div><h3>Lương theo cấp bậc / vai trò</h3><p>Nhóm có n < 5 không hiển thị trung bình, trung vị hoặc phân vị.</p></div><button class="button button-secondary" data-export="salary-role-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="salary-role-table"><thead><tr><th>Cấp bậc</th><th class="numeric">Số tin</th><th class="numeric">Có lương số</th><th class="numeric">Độ phủ</th><th class="numeric">Trung bình</th><th class="numeric">Trung vị</th><th class="numeric">P25</th><th class="numeric">P75</th></tr></thead><tbody>
+                <tr><td>Thực tập sinh</td><td class="numeric">24</td><td class="numeric">16</td><td class="numeric">66,7%</td><td class="numeric">5,51</td><td class="numeric">5,00</td><td class="numeric">4,50</td><td class="numeric">6,09</td></tr><tr><td>Nhân viên mới (Junior)</td><td class="numeric">52</td><td class="numeric">30</td><td class="numeric">57,7%</td><td class="numeric">10,06</td><td class="numeric">9,50</td><td class="numeric">8,50</td><td class="numeric">11,00</td></tr><tr><td>Nhân viên</td><td class="numeric">156</td><td class="numeric">92</td><td class="numeric">59,0%</td><td class="numeric">14,43</td><td class="numeric">13,50</td><td class="numeric">11,00</td><td class="numeric">16,25</td></tr><tr><td>Nhân viên cấp cao (Senior)</td><td class="numeric">57</td><td class="numeric">29</td><td class="numeric">50,9%</td><td class="numeric">22,43</td><td class="numeric">21,00</td><td class="numeric">18,50</td><td class="numeric">23,50</td></tr><tr><td>Trưởng nhóm</td><td class="numeric">29</td><td class="numeric">13</td><td class="numeric">44,8%</td><td class="numeric">30,73</td><td class="numeric">29,50</td><td class="numeric">23,50</td><td class="numeric">34,50</td></tr><tr><td>Quản lý / Trưởng phòng</td><td class="numeric">23</td><td class="numeric">17</td><td class="numeric">73,9%</td><td class="numeric">36,34</td><td class="numeric">36,00</td><td class="numeric">26,50</td><td class="numeric">39,50</td></tr><tr class="low-sample-row"><td>Giám đốc</td><td class="numeric">7</td><td class="numeric">4</td><td class="numeric">57,1%</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td></tr>
+              </tbody></table></div>
+            </div>
+            <div class="tab-content" data-tab-panel="salary-location">
+              <div class="panel-header"><div><h3>Lương theo địa phương</h3><p>Đơn vị triệu VND/tháng · hiển thị n và độ phủ cạnh kết quả.</p></div><button class="button button-secondary" data-export="salary-location-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="salary-location-table"><thead><tr><th>Địa phương</th><th class="numeric">Số tin</th><th class="numeric">Có lương số</th><th class="numeric">Độ phủ</th><th class="numeric">Trung bình</th><th class="numeric">Trung vị</th><th class="numeric">P25</th><th class="numeric">P75</th></tr></thead><tbody>
+                <tr><td>Hà Nội</td><td class="numeric">96</td><td class="numeric">59</td><td class="numeric">61,5%</td><td class="numeric">20,36</td><td class="numeric">17,00</td><td class="numeric">11,00</td><td class="numeric">27,50</td></tr><tr><td>Hồ Chí Minh</td><td class="numeric">103</td><td class="numeric">59</td><td class="numeric">57,3%</td><td class="numeric">20,24</td><td class="numeric">16,00</td><td class="numeric">13,50</td><td class="numeric">24,00</td></tr><tr><td>Đà Nẵng</td><td class="numeric">23</td><td class="numeric">10</td><td class="numeric">43,5%</td><td class="numeric">15,45</td><td class="numeric">14,75</td><td class="numeric">11,38</td><td class="numeric">19,13</td></tr><tr><td>Hải Phòng</td><td class="numeric">21</td><td class="numeric">15</td><td class="numeric">71,4%</td><td class="numeric">12,20</td><td class="numeric">10,00</td><td class="numeric">7,00</td><td class="numeric">12,50</td></tr><tr><td>Cần Thơ</td><td class="numeric">16</td><td class="numeric">12</td><td class="numeric">75,0%</td><td class="numeric">11,38</td><td class="numeric">10,50</td><td class="numeric">8,88</td><td class="numeric">11,13</td></tr><tr><td>Bình Dương</td><td class="numeric">31</td><td class="numeric">18</td><td class="numeric">58,1%</td><td class="numeric">14,41</td><td class="numeric">13,00</td><td class="numeric">11,00</td><td class="numeric">18,75</td></tr><tr><td>Đồng Nai</td><td class="numeric">16</td><td class="numeric">7</td><td class="numeric">43,8%</td><td class="numeric">16,13</td><td class="numeric">17,50</td><td class="numeric">12,75</td><td class="numeric">20,25</td></tr><tr><td>Bắc Ninh</td><td class="numeric">24</td><td class="numeric">10</td><td class="numeric">41,7%</td><td class="numeric">17,85</td><td class="numeric">12,50</td><td class="numeric">12,00</td><td class="numeric">17,50</td></tr><tr class="low-sample-row"><td>Quảng Ninh</td><td class="numeric">4</td><td class="numeric">1</td><td class="numeric">25,0%</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td></tr><tr><td>Khánh Hòa</td><td class="numeric">9</td><td class="numeric">7</td><td class="numeric">77,8%</td><td class="numeric">15,93</td><td class="numeric">12,50</td><td class="numeric">11,00</td><td class="numeric">18,75</td></tr>
+              </tbody></table></div>
+            </div>
+            <div class="tab-content" data-tab-panel="salary-occupation">
+              <div class="panel-header"><div><h3>Lương theo nghề</h3><p>Danh mục nghề chuẩn CCareer · mẫu nhỏ được ẩn chỉ số lương.</p></div><button class="button button-secondary" data-export="salary-occupation-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="salary-occupation-table"><thead><tr><th>Nghề</th><th class="numeric">Số tin</th><th class="numeric">Có lương số</th><th class="numeric">Độ phủ</th><th class="numeric">Trung bình</th><th class="numeric">Trung vị</th><th class="numeric">P25</th><th class="numeric">P75</th></tr></thead><tbody>
+                <tr><td>Lập trình viên Backend</td><td class="numeric">21</td><td class="numeric">12</td><td class="numeric">57,1%</td><td class="numeric">25,94</td><td class="numeric">22,09</td><td class="numeric">19,50</td><td class="numeric">24,38</td></tr><tr><td>Lập trình viên Frontend</td><td class="numeric">13</td><td class="numeric">8</td><td class="numeric">61,5%</td><td class="numeric">22,25</td><td class="numeric">20,25</td><td class="numeric">14,25</td><td class="numeric">26,50</td></tr><tr><td>Kiểm thử phần mềm (QA/QC)</td><td class="numeric">14</td><td class="numeric">8</td><td class="numeric">57,1%</td><td class="numeric">21,43</td><td class="numeric">18,56</td><td class="numeric">17,33</td><td class="numeric">23,50</td></tr><tr><td>Phân tích nghiệp vụ (BA)</td><td class="numeric">23</td><td class="numeric">16</td><td class="numeric">69,6%</td><td class="numeric">24,59</td><td class="numeric">22,50</td><td class="numeric">11,88</td><td class="numeric">37,61</td></tr><tr><td>Kỹ sư cơ khí</td><td class="numeric">14</td><td class="numeric">10</td><td class="numeric">71,4%</td><td class="numeric">17,75</td><td class="numeric">15,00</td><td class="numeric">9,88</td><td class="numeric">26,38</td></tr><tr class="low-sample-row"><td>Chuyên viên tín dụng</td><td class="numeric">3</td><td class="numeric">2</td><td class="numeric">66,7%</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td><td class="numeric muted-cell">n&lt;5</td></tr>
+              </tbody></table></div>
+            </div>
+            <div class="tab-content" data-tab-panel="salary-salary-type">
+              <div class="panel-header"><div><h3>Cơ cấu loại lương</h3><p>Toàn bộ tập tin duy nhất; loại lương không đồng nghĩa với đủ dữ liệu để tính trung vị.</p></div></div>
+              <div class="salary-type-layout"><div class="donut-placeholder"><div><strong>348</strong><span>tin duy nhất</span></div></div><div class="salary-type-legend"><div><i class="type-dot type-range"></i><span>Range · Khoảng lương</span><strong>185 · 53,2%</strong></div><div><i class="type-dot type-up"></i><span>Up to · Mức trần</span><strong>31 · 8,9%</strong></div><div><i class="type-dot type-from"></i><span>From · Mức sàn</span><strong>22 · 6,3%</strong></div><div><i class="type-dot type-fixed"></i><span>Fixed · Cố định</span><strong>16 · 4,6%</strong></div><div><i class="type-dot type-negotiable"></i><span>Negotiable · Thỏa thuận</span><strong>64 · 18,4%</strong></div><div><i class="type-dot type-none"></i><span>Không ghi / Không hợp lệ</span><strong>30 · 8,6%</strong></div></div></div>
+            </div>
+          </div>
+          <div class="notice notice-neutral compact-notice"><span class="notice-symbol">i</span><div><strong>Gross/Net chưa được phân biệt.</strong> Không quy đổi Gross ↔ Net. Khi nhóm có n &lt; 5, UI hiển thị “n&lt;5” và không hiển thị chỉ số trung bình/trung vị/phân vị.</div></div>
+          <div class="method-footer">Đơn vị: triệu VND/tháng · Lương đại diện: range = (từ + đến)/2; fixed = giá trị cố định · Không tính up_to/from/negotiable/not_stated · Chưa phân biệt Gross/Net.</div>
+        </section>
+
+        <!-- SCR-07: QUALITY + MAPPING -->
+        <section class="page" id="page-quality" data-title="Chất lượng & ánh xạ">
+          <div class="page-heading"><div><div class="eyebrow">SCR-07 · NỀN DỮ LIỆU / PHASE 1B</div><h1>Chất lượng dữ liệu & ánh xạ nhãn</h1><p class="page-description">Theo dõi độ phủ dữ liệu, xử lý nhãn nguồn chưa ánh xạ và kiểm tra lịch sử thay đổi.</p></div><div class="heading-actions"><span class="role-chip">Vai trò mô phỏng: BA / Admin</span></div></div>
+          <div class="quality-summary-grid"><div class="summary-box"><span>Tổng bản ghi crawl</span><strong>374</strong><small>Trước khi loại reject / trùng</small></div><div class="summary-box"><span>Tin duy nhất</span><strong>348</strong><small>Được dùng cho thống kê</small></div><div class="summary-box"><span>Chờ ánh xạ</span><strong id="queue-kpi">18</strong><small>Unmapped trong mẫu hiển thị</small></div><div class="summary-box"><span>Tin ngành chưa phân loại</span><strong id="unclassified-kpi">17</strong><small>Tham chiếu tab Quality workbook</small></div></div>
+          <div class="panel tab-panel">
+            <div class="tab-list" role="tablist" aria-label="Quản trị dữ liệu">
+              <button class="tab-button active" data-tab-group="quality" data-tab="coverage">Chỉ số chất lượng</button>
+              <button class="tab-button" data-tab-group="quality" data-tab="queue">Hàng chờ ánh xạ <span class="tab-count" id="queue-tab-count">18</span></button>
+              <button class="tab-button" data-tab-group="quality" data-tab="log">Nhật ký thay đổi</button>
+            </div>
+            <div class="tab-content active" data-tab-panel="quality-coverage">
+              <div class="panel-header"><div><h3>Độ phủ và ngưỡng kiểm soát</h3><p>Đối chiếu từng nguồn với ngưỡng chất lượng theo tài liệu crawl.</p></div><button class="button button-secondary" data-export="quality-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="quality-table"><thead><tr><th>Nguồn</th><th class="numeric">Tổng bản ghi</th><th class="numeric">Tin duy nhất</th><th class="numeric">% Reject <small>≤ 2%</small></th><th class="numeric">% Địa điểm <small>≥ 95%</small></th><th class="numeric">% Ngành <small>≥ 90%</small></th><th class="numeric">% Nghề <small>≥ 80%</small></th><th class="numeric">% Kinh nghiệm <small>≥ 90%</small></th><th>Đánh giá</th></tr></thead><tbody>
+                <tr><td><strong>TopCV</strong></td><td class="numeric">185</td><td class="numeric">172</td><td class="numeric"><span class="pass-value">1,6%</span></td><td class="numeric"><span class="pass-value">98,3%</span></td><td class="numeric"><span class="pass-value">95,3%</span></td><td class="numeric"><span class="pass-value">89,5%</span></td><td class="numeric"><span class="pass-value">97,1%</span></td><td><span class="status-label success-status">Đạt ngưỡng</span></td></tr>
+                <tr><td><strong>VietnamWorks</strong></td><td class="numeric">189</td><td class="numeric">176</td><td class="numeric"><span class="pass-value">1,6%</span></td><td class="numeric"><span class="pass-value">98,9%</span></td><td class="numeric"><span class="pass-value">94,9%</span></td><td class="numeric"><span class="pass-value">86,9%</span></td><td class="numeric"><span class="pass-value">97,7%</span></td><td><span class="status-label success-status">Đạt ngưỡng</span></td></tr>
+                <tr class="total-row"><td>Tất cả</td><td class="numeric">374</td><td class="numeric">348</td><td class="numeric">1,6%</td><td class="numeric">98,6%</td><td class="numeric">95,1%</td><td class="numeric">88,2%</td><td class="numeric">97,4%</td><td><span class="status-label success-status">Đạt ngưỡng</span></td></tr>
+              </tbody></table></div>
+              <div class="quality-progress-grid"><div class="quality-progress-card"><div><span>Phủ địa điểm</span><strong>98,6%</strong></div><div class="progress-track"><i style="width:98.6%"></i></div><small>Ngưỡng ≥ 95% · Đạt</small></div><div class="quality-progress-card"><div><span>Phủ ngành</span><strong>95,1%</strong></div><div class="progress-track"><i style="width:95.1%"></i></div><small>Ngưỡng ≥ 90% · Đạt</small></div><div class="quality-progress-card"><div><span>Phủ nghề</span><strong>88,2%</strong></div><div class="progress-track"><i style="width:88.2%"></i></div><small>Ngưỡng ≥ 80% · Đạt</small></div><div class="quality-progress-card"><div><span>Phủ kinh nghiệm</span><strong>97,4%</strong></div><div class="progress-track"><i style="width:97.4%"></i></div><small>Ngưỡng ≥ 90% · Đạt</small></div></div>
+              <div class="flag-section"><div class="panel-header"><div><h3>Cờ chất lượng cần theo dõi</h3><p>Các trường hợp warn vẫn được lưu; chỉ reject mới bị loại khỏi tập phân tích.</p></div></div><div class="flag-grid"><div><span>location_unmapped</span><strong>5</strong></div><div><span>experience_unparsed</span><strong>9</strong></div><div><span>salary_invalid</span><strong>2</strong></div><div><span>salary_ambiguous</span><strong>3</strong></div><div><span>posted_missing</span><strong>4</strong></div><div><span>missing_company</span><strong>6</strong></div></div></div>
+              <div class="notice notice-warning compact-notice"><span class="notice-symbol">!</span><div><strong>Còn 17 tin chưa phân loại ngành.</strong> Số liệu này cần được rà soát ở hàng chờ ánh xạ. Ngưỡng phủ đạt không đồng nghĩa tất cả nhãn đã được duyệt.</div><button class="button button-secondary" data-open-quality-tab="queue">Mở hàng chờ</button></div>
+            </div>
+            <div class="tab-content" data-tab-panel="quality-queue">
+              <div class="queue-summary-row"><div><h3>Hàng chờ duyệt nhãn</h3><p>Mỗi dòng là một nhãn nguồn; ưu tiên xử lý nhãn có nhiều tin bị ảnh hưởng nhất.</p></div><div class="queue-summary-numbers"><span><strong id="queue-unmapped">18</strong> chờ duyệt</span><span><strong>69</strong> tin ảnh hưởng (mẫu)</span></div></div>
+              <div class="queue-controls"><div class="queue-filter-group"><label>Loại nhãn <select id="queue-type-filter"><option value="all">Tất cả loại</option><option value="industry">Ngành</option><option value="occupation">Nghề</option><option value="location">Địa điểm</option><option value="experience">Kinh nghiệm</option><option value="role">Cấp bậc</option></select></label><label>Trạng thái <select id="queue-status-filter"><option value="all">Tất cả trạng thái</option><option value="unmapped">Chờ ánh xạ</option><option value="mapped">Đã ánh xạ</option><option value="ignored">Đã bỏ qua</option></select></label><label class="queue-search-label">Tìm nhãn <input id="queue-search" placeholder="Nhập nhãn nguồn..."></label></div><button class="button button-secondary" data-export="mapping-queue-table">Xuất CSV</button></div>
+              <div class="notice notice-neutral compact-notice"><span class="notice-symbol">i</span><div><strong>Quy tắc trạng thái:</strong> mapped = đã trỏ tới master; ignored = không sử dụng nhưng vẫn giữ tin trong tổng; đề nghị thêm master mới vẫn là unmapped cho đến khi Tech Lead bổ sung danh mục.</div></div>
+              <div class="table-wrap"><table id="mapping-queue-table"><thead><tr><th>Loại nhãn</th><th>Nguồn</th><th>Nhãn gốc</th><th class="numeric">Số tin</th><th>Gợi ý hệ thống</th><th>Hành động</th><th>Master đích</th><th>Trạng thái</th><th></th></tr></thead><tbody id="mapping-queue-body">
+                <tr data-type="industry" data-status="unmapped" data-jobs="4"><td><span class="type-label">Ngành</span></td><td>TopCV</td><td><strong>Thiết kế - Mỹ thuật</strong><small>Phát hiện: 09/10/2026</small></td><td class="numeric">4</td><td>Marketing – Truyền thông<small>Độ khớp thấp</small></td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Marketing – Truyền thông</option><option>Mỹ thuật – Thiết kế</option><option>Kinh doanh – Bán hàng</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="unmapped" data-jobs="3"><td><span class="type-label">Ngành</span></td><td>VietnamWorks</td><td><strong>Bảo hiểm</strong><small>Phát hiện: 06/10/2026</small></td><td class="numeric">3</td><td>Tài chính – Kế toán</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Tài chính – Kế toán</option><option>Kinh doanh – Bán hàng</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="unmapped" data-jobs="3"><td><span class="type-label">Ngành</span></td><td>TopCV</td><td><strong>Nông - Lâm - Ngư nghiệp</strong><small>Phát hiện: 07/10/2026</small></td><td class="numeric">3</td><td>(Không có ngành gần)</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Nông nghiệp – Lâm nghiệp</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="unmapped" data-jobs="2"><td><span class="type-label">Ngành</span></td><td>VietnamWorks</td><td><strong>Hàng tiêu dùng (FMCG)</strong><small>Phát hiện: 11/10/2026</small></td><td class="numeric">2</td><td>Kinh doanh – Bán hàng</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Kinh doanh – Bán hàng</option><option>Sản xuất – Cơ khí</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="unmapped" data-jobs="2"><td><span class="type-label">Ngành</span></td><td>VietnamWorks</td><td><strong>Dệt may - Da giày</strong><small>Phát hiện: 13/10/2026</small></td><td class="numeric">2</td><td>Sản xuất – Cơ khí</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Sản xuất – Cơ khí</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="11"><td><span class="type-label">Nghề</span></td><td>TopCV</td><td><strong>Digital Designer</strong><small>Phát hiện: 08/10/2026</small></td><td class="numeric">11</td><td>Marketing – Truyền thông</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Thiết kế đồ họa</option><option>Chuyên viên Marketing</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="9"><td><span class="type-label">Nghề</span></td><td>VietnamWorks</td><td><strong>Phiên dịch tiếng Nhật</strong><small>Phát hiện: 03/10/2026</small></td><td class="numeric">9</td><td>Giáo dục – Đào tạo</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Phiên dịch viên tiếng Nhật</option><option>Giáo viên tiếng Nhật</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="7"><td><span class="type-label">Nghề</span></td><td>TopCV</td><td><strong>Kỹ thuật viên bảo trì</strong><small>Phát hiện: 10/10/2026</small></td><td class="numeric">7</td><td>Điện – Điện tử</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Kỹ thuật viên bảo trì</option><option>Kỹ sư điện</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="5"><td><span class="type-label">Nghề</span></td><td>VietnamWorks</td><td><strong>Tài xế / Lái xe</strong><small>Phát hiện: 05/10/2026</small></td><td class="numeric">5</td><td>Logistics – Xuất nhập khẩu</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Tài xế</option><option>Nhân viên kho vận</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="5"><td><span class="type-label">Nghề</span></td><td>TopCV</td><td><strong>Chuyên viên thu mua</strong><small>Phát hiện: 07/10/2026</small></td><td class="numeric">5</td><td>Logistics – Xuất nhập khẩu</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Nhân viên thu mua</option><option>Nhân viên xuất nhập khẩu</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="occupation" data-status="unmapped" data-jobs="4"><td><span class="type-label">Nghề</span></td><td>VietnamWorks</td><td><strong>Chăm sóc da / Spa</strong><small>Phát hiện: 12/10/2026</small></td><td class="numeric">4</td><td>Dịch vụ – Nhà hàng – Khách sạn</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Kỹ thuật viên Spa</option><option>Nhân viên chăm sóc khách hàng</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="location" data-status="unmapped" data-jobs="2"><td><span class="type-label">Địa điểm</span></td><td>TopCV</td><td><strong>TP. Thủ Đức</strong><small>Phát hiện: 08/10/2026</small></td><td class="numeric">2</td><td>Hồ Chí Minh</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Hồ Chí Minh</option><option>Bình Dương</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="location" data-status="unmapped" data-jobs="1"><td><span class="type-label">Địa điểm</span></td><td>VietnamWorks</td><td><strong>Huế</strong><small>Phát hiện: 09/10/2026</small></td><td class="numeric">1</td><td>(Không có tỉnh gần)</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Huế</option><option>Thừa Thiên Huế</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="location" data-status="unmapped" data-jobs="1"><td><span class="type-label">Địa điểm</span></td><td>VietnamWorks</td><td><strong>Nước ngoài</strong><small>Phát hiện: 11/10/2026</small></td><td class="numeric">1</td><td>(Không áp dụng)</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Không xác định</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="experience" data-status="unmapped" data-jobs="4"><td><span class="type-label">Kinh nghiệm</span></td><td>TopCV</td><td><strong>Không giới hạn kinh nghiệm</strong><small>Phát hiện: 06/10/2026</small></td><td class="numeric">4</td><td>Chưa có kinh nghiệm</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Chưa có kinh nghiệm</option><option>Không yêu cầu kinh nghiệm</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="experience" data-status="unmapped" data-jobs="3"><td><span class="type-label">Kinh nghiệm</span></td><td>VietnamWorks</td><td><strong>Có kinh nghiệm</strong><small>Phát hiện: 07/10/2026</small></td><td class="numeric">3</td><td>(Không đủ để chọn nhóm)</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Dưới 1 năm</option><option>1 – dưới 2 năm</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="experience" data-status="unmapped" data-jobs="2"><td><span class="type-label">Kinh nghiệm</span></td><td>TopCV</td><td><strong>Kinh nghiệm thực tế</strong><small>Phát hiện: 12/10/2026</small></td><td class="numeric">2</td><td>(Không đủ để chọn nhóm)</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Dưới 1 năm</option><option>1 – dưới 2 năm</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="mapped" data-jobs="6"><td><span class="type-label">Ngành</span></td><td>TopCV</td><td><strong>Bán lẻ / Bán sỉ</strong><small>Phát hiện: 21/09/2026</small></td><td class="numeric">6</td><td>Kinh doanh – Bán hàng</td><td>Ánh xạ vào master có sẵn</td><td>Kinh doanh – Bán hàng</td><td><span class="status-label mapped-status">mapped</span></td><td><span class="muted-cell">—</span></td></tr>
+                <tr data-type="industry" data-status="mapped" data-jobs="4"><td><span class="type-label">Ngành</span></td><td>VietnamWorks</td><td><strong>Ngân hàng</strong><small>Phát hiện: 19/09/2026</small></td><td class="numeric">4</td><td>Tài chính – Kế toán</td><td>Ánh xạ vào master có sẵn</td><td>Tài chính – Kế toán</td><td><span class="status-label mapped-status">mapped</span></td><td><span class="muted-cell">—</span></td></tr>
+                <tr data-type="industry" data-status="unmapped" data-jobs="1"><td><span class="type-label">Ngành</span></td><td>TopCV</td><td><strong>Báo chí / Biên tập</strong><small>Phát hiện: 14/10/2026</small></td><td class="numeric">1</td><td>Marketing – Truyền thông</td><td><select class="row-action"><option value="">Chọn hành động</option><option value="map">Ánh xạ master có sẵn</option><option value="add">Đề nghị thêm master mới</option><option value="ignore">Bỏ qua (ignored)</option></select></td><td><select class="row-master"><option value="">Chọn master</option><option>Marketing – Truyền thông</option><option>Truyền thông – Báo chí</option></select></td><td><span class="status-label pending-status">unmapped</span></td><td><button class="button button-small apply-mapping">Lưu</button></td></tr>
+                <tr data-type="industry" data-status="ignored" data-jobs="2"><td><span class="type-label">Ngành</span></td><td>TopCV</td><td><strong>Thư viện / Bảo tàng</strong><small>Phát hiện: 07/10/2026</small></td><td class="numeric">2</td><td>(Không thuộc phạm vi)</td><td>Bỏ qua (ignored)</td><td>—</td><td><span class="status-label ignored-status">ignored</span></td><td><span class="muted-cell">—</span></td></tr>
+                <tr data-type="location" data-status="ignored" data-jobs="1"><td><span class="type-label">Địa điểm</span></td><td>TopCV</td><td><strong>Toàn quốc</strong><small>Phát hiện: 05/10/2026</small></td><td class="numeric">1</td><td>(Không áp dụng)</td><td>Bỏ qua (ignored)</td><td>—</td><td><span class="status-label ignored-status">ignored</span></td><td><span class="muted-cell">—</span></td></tr>
+              </tbody></table></div>
+              <div class="table-footnote">Mockup minh họa 20 nhãn; workbook có 22 nhãn mẫu. Hàng đã mapped/ignored được giữ trong danh sách để xem trạng thái và lịch sử.</div>
+            </div>
+            <div class="tab-content" data-tab-panel="quality-log">
+              <div class="panel-header"><div><h3>Nhật ký thay đổi ánh xạ</h3><p>Lưu người thực hiện, vai trò, thời điểm, giá trị cũ → mới và lý do.</p></div><button class="button button-secondary" data-export="mapping-log-table">Xuất CSV</button></div>
+              <div class="table-wrap"><table id="mapping-log-table"><thead><tr><th>Thời điểm</th><th>Người làm</th><th>Vai trò</th><th>Loại nhãn</th><th>Nguồn</th><th>Nhãn gốc</th><th>Giá trị cũ</th><th>Giá trị mới</th><th>Hành động</th><th>Lý do</th></tr></thead><tbody id="mapping-log-body">
+                <tr><td>24/10/2026 09:45</td><td>BA</td><td>BA</td><td>Ngành</td><td>TopCV</td><td>Thư viện / Bảo tàng</td><td>unmapped</td><td>ignored</td><td>Bỏ qua</td><td>Không thuộc phạm vi thị trường cần phân tích</td></tr>
+                <tr><td>24/10/2026 09:45</td><td>BA</td><td>BA</td><td>Ngành</td><td>TopCV</td><td>Nông - Lâm - Ngư nghiệp</td><td>unmapped</td><td>unmapped (chờ master mới)</td><td>Đề nghị thêm master</td><td>Chưa có ngành tương ứng; chờ Tech Lead</td></tr>
+                <tr><td>23/10/2026 15:20</td><td>BA</td><td>BA</td><td>Địa điểm</td><td>TopCV</td><td>Thủ Đức</td><td>Đồng Nai</td><td>Hồ Chí Minh</td><td>Sửa ánh xạ</td><td>Ánh xạ nhầm tỉnh. Báo cáo tháng 9 đã phát hành giữ nguyên.</td></tr>
+                <tr><td>22/10/2026 10:00</td><td>BA</td><td>BA</td><td>Nghề</td><td>TopCV</td><td>Nhân viên thu mua</td><td>unmapped</td><td>Nhân viên thu mua (nghề mới)</td><td>Ánh xạ</td><td>Ánh xạ sau khi Tech Lead bổ sung master.</td></tr>
+                <tr><td>22/10/2026 09:50</td><td>Tech Lead</td><td>Tech Lead</td><td>Nghề</td><td>Master</td><td>Nhân viên thu mua</td><td>Chưa có</td><td>Nghề mới · Logistics – Xuất nhập khẩu</td><td>Thêm master mới</td><td>Duyệt đề nghị và thêm qua file 03_master_additions.sql.</td></tr>
+                <tr><td>20/10/2026 16:40</td><td>BA</td><td>BA</td><td>Nghề</td><td>TopCV</td><td>Nhân viên thu mua</td><td>Chưa có</td><td>Đề nghị thêm nghề mới</td><td>Đề nghị thêm master</td><td>Chưa có nghề chuẩn tương ứng; nghề mới bắt buộc có ngành.</td></tr>
+                <tr><td>18/10/2026 11:10</td><td>BA</td><td>BA</td><td>Ngành</td><td>VietnamWorks</td><td>Ngân hàng</td><td>unmapped</td><td>Tài chính – Kế toán</td><td>Ánh xạ</td><td>Nhãn nhiều tin nhất trong tuần.</td></tr>
+              </tbody></table></div>
+              <div class="notice notice-neutral compact-notice"><span class="notice-symbol">i</span><div>Nhật ký thay đổi là đề xuất bổ sung so với tài liệu crawl. Không cho phép xóa dòng nhãn; mọi sửa ánh xạ đã duyệt phải ghi lý do.</div></div>
+            </div>
+          </div>
+          <div class="method-footer">Quyền mô phỏng: BA được ánh xạ master có sẵn và bỏ qua nhãn; Tech Lead duyệt/thêm master mới · Bot chỉ đọc master · Không ai được xóa dòng nhãn.</div>
+        </section>
+
+        <!-- FUTURE PHASE SCREENS -->
+        <section class="page" id="page-trends" data-title="Xu hướng & kỹ năng">
+          <div class="page-heading"><div><div class="eyebrow">SCR-04 · PHASE 2A / 2B</div><h1>Xu hướng & kỹ năng</h1><p class="page-description">Thiết kế định hướng cho phân tích xu hướng ngành và kỹ năng xuất hiện trong tin tuyển dụng.</p></div><span class="phase-tag large-tag">PHASE 2</span></div>
+          <div class="phase-gate"><div class="phase-gate-icon">⌁</div><h2>Chức năng chưa sẵn sàng cho Phase 1B</h2><p>Xu hướng cần ít nhất 6 tháng dữ liệu liên tục, hai cửa sổ 3 tháng có cùng phạm vi crawl và đủ khối lượng tin. Phân tích kỹ năng cần từ điển BA quản lý, bảng dẫn xuất và Golden Set đạt độ chính xác tối thiểu 90%.</p><div class="gate-checks"><span>○ Dữ liệu liên tục ≥ 6 tháng</span><span>○ Cùng crawl scope</span><span>○ Golden Set kỹ năng ≥ 90%</span></div></div>
+        </section>
+        <section class="page" id="page-reports" data-title="Báo cáo định kỳ">
+          <div class="page-heading"><div><div class="eyebrow">SCR-06 · PHASE 2C</div><h1>Báo cáo định kỳ</h1><p class="page-description">Danh sách báo cáo tháng, xem trước, duyệt nhận định và tải PDF/Excel.</p></div><span class="phase-tag large-tag">PHASE 2</span></div>
+          <div class="phase-gate"><div class="phase-gate-icon">▧</div><h2>Chức năng dự kiến sau khi SCR-01..03 được nghiệm thu</h2><p>Báo cáo cần mẫu nội dung được PM duyệt. Nhận định tự động phải được BA rà soát và duyệt trước khi phát hành. Báo cáo đã phát hành là bản chụp cố định.</p><div class="report-preview-card"><div><strong>Báo cáo thị trường tuyển dụng · 10/2026</strong><span>Trạng thái: Chờ BA duyệt · Dữ liệu chốt 31/10/2026</span></div><span class="status-label pending-status">Chờ duyệt</span></div></div>
+        </section>
+        <section class="page" id="page-compare" data-title="Việt Nam – Nhật Bản">
+          <div class="page-heading"><div><div class="eyebrow">SCR-05 · PHASE 3</div><h1>So sánh Việt Nam – Nhật Bản</h1><p class="page-description">So sánh cơ cấu ngành theo tỷ trọng, không so sánh số tuyệt đối.</p></div><span class="phase-tag large-tag">PHASE 3</span></div>
+          <div class="phase-gate"><div class="phase-gate-icon">⇄</div><h2>Chờ PM chốt nguồn dữ liệu phía Nhật</h2><p>Workbook chỉ mô phỏng bằng dữ liệu giả lập. Đề xuất khả thi là dùng đơn hàng nội bộ CCareer, nhưng dữ liệu này không đại diện cho toàn thị trường lao động Nhật Bản.</p><div class="notice notice-warning compact-notice"><span class="notice-symbol">!</span><div>Không dùng số headcount phía Nhật để so tuyệt đối với số tin tuyển dụng phía Việt Nam. Chỉ so tỷ trọng ngành chuẩn.</div></div></div>
+        </section>
+
+        <footer class="app-footer"><span>CCareer · Career Market Intelligence</span><span>Low-fi prototype · HTML / CSS / Vanilla JS · v0.1</span></footer>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="method-dialog" class="modal-dialog">
+    <div class="modal-header"><div><span class="eyebrow">GIẢI THÍCH CHỈ SỐ</span><h2>Phương pháp & giới hạn dữ liệu</h2></div><button class="icon-button" id="method-close" aria-label="Đóng">×</button></div>
+    <div class="modal-content">
+      <div class="method-item"><strong>Tin duy nhất</strong><p>Loại bản ghi có dq_status = reject và bản trùng (dedup_key trùng). Mọi chỉ số thống kê tính trên tập này.</p></div>
+      <div class="method-item"><strong>Tin mới (flow) và tin đang tuyển (stock)</strong><p>Tin mới được xác định theo event_date trong kỳ. Tin đang tuyển là status = active và chưa quá deadline tại ngày chốt.</p></div>
+      <div class="method-item"><strong>Độ phủ</strong><p>Số tin có giá trị của trường dữ liệu chia cho tổng tin duy nhất trong cùng nhóm và cùng bộ lọc.</p></div>
+      <div class="method-item"><strong>Lương đại diện</strong><p>Range dùng trung điểm khoảng lương; Fixed dùng giá trị cố định. Up to, From, Negotiable và Not stated không đưa vào thống kê trung vị/trung bình.</p></div>
+      <div class="method-item"><strong>Ngưỡng mẫu nhỏ</strong><p>Nếu số tin có lương số n &lt; 5, không hiển thị trung bình, trung vị và phân vị; thay bằng “n&lt;5”.</p></div>
+      <div class="method-item"><strong>Giới hạn đại diện</strong><p>Dữ liệu chỉ phản ánh tin tuyển dụng công khai trên TopCV và VietnamWorks; đơn vị là số tin, không phải số người cần tuyển. Tin nhiều địa điểm đang chỉ ghi nhận địa điểm đầu tiên. Gross/Net chưa được phân biệt.</p></div>
+    </div>
+    <div class="modal-footer"><button class="button button-primary" id="method-ok">Đã hiểu</button></div>
+  </dialog>
+
+  <dialog id="action-dialog" class="modal-dialog">
+    <div class="modal-header"><div><span class="eyebrow">XỬ LÝ NHÃN</span><h2 id="action-dialog-title">Xác nhận hành động</h2></div><button class="icon-button" id="action-close" aria-label="Đóng">×</button></div>
+    <div class="modal-content"><p id="action-dialog-description">Bạn đang thay đổi trạng thái của nhãn.</p><label class="filter-field modal-field"><span>Ghi chú / Lý do</span><textarea id="action-reason" rows="3" placeholder="Nhập lý do xử lý hoặc thông tin gửi Tech Lead..."></textarea></label><p class="form-hint" id="action-dialog-hint"></p></div>
+    <div class="modal-footer"><button class="button button-secondary" id="action-cancel">Hủy</button><button class="button button-primary" id="action-confirm">Xác nhận lưu</button></div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+/* =========================================================
+   CCareer Market Intelligence — low-fi interaction layer
+   Vanilla JavaScript only. All figures remain static workbook
+   examples; filters demonstrate cross-screen selection state.
+   ========================================================= */
+(function () {
+  'use strict';
+
+  const pages = Array.from(document.querySelectorAll('.page'));
+  const navLinks = Array.from(document.querySelectorAll('.nav-link[data-page]'));
+  const filterIds = ['filter-period', 'filter-source', 'filter-industry', 'filter-location', 'filter-experience', 'filter-role'];
+  const filterLabels = {
+    'filter-period': 'Thời gian',
+    'filter-source': 'Nguồn',
+    'filter-industry': 'Ngành',
+    'filter-location': 'Địa phương',
+    'filter-experience': 'Kinh nghiệm',
+    'filter-role': 'Cấp bậc'
+  };
+  const pageTitles = {
+    overview: 'Tổng quan', demand: 'Nhu cầu tuyển dụng', salary: 'Phân tích lương', quality: 'Chất lượng & ánh xạ',
+    trends: 'Xu hướng & kỹ năng', reports: 'Báo cáo định kỳ', compare: 'Việt Nam – Nhật Bản'
+  };
+
+  let pendingMapping = null;
+  let toastTimer = null;
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+
+  function navigate(pageKey) {
+    const page = document.getElementById(`page-${pageKey}`);
+    if (!page) return;
+    pages.forEach(item => item.classList.toggle('active', item === page));
+    navLinks.forEach(link => link.classList.toggle('active', link.dataset.page === pageKey));
+    const crumb = document.querySelector('.breadcrumb strong');
+    if (crumb) crumb.textContent = `Career Market Intelligence / ${pageTitles[pageKey] || ''}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (['trends', 'reports', 'compare'].includes(pageKey)) {
+      showToast('Màn hình định hướng cho phase sau; chưa thuộc phạm vi MVP Phase 1B.');
+    }
+  }
+
+  navLinks.forEach(link => link.addEventListener('click', () => navigate(link.dataset.page)));
+  document.querySelectorAll('[data-go]').forEach(button => button.addEventListener('click', () => navigate(button.dataset.go)));
+
+  // Global filter state stays in the common shell when users change screens.
+  function updateFilterSummary() {
+    const active = filterIds
+      .map(id => {
+        const el = document.getElementById(id);
+        if (!el || el.value === 'all' || el.value === '6m') return null;
+        const label = el.options[el.selectedIndex]?.text || el.value;
+        return `${filterLabels[id]}: ${label}`;
+      })
+      .filter(Boolean);
+    const text = active.length
+      ? `Đang chọn: ${active.join(' · ')} · Dữ liệu minh họa chưa được tính lại theo bộ lọc`
+      : 'Đang xem toàn bộ dữ liệu mẫu · Bộ lọc áp dụng xuyên suốt các màn hình';
+    const status = document.getElementById('filter-state-text');
+    if (status) status.textContent = text;
+  }
+  filterIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', updateFilterSummary);
+  });
+  document.getElementById('clear-filters')?.addEventListener('click', () => {
+    filterIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.selectedIndex = 0;
+    });
+    updateFilterSummary();
+    showToast('Đã đặt lại bộ lọc.');
+  });
+
+  // Tab behavior shared by Demand, Salary and Quality sections.
+  document.querySelectorAll('.tab-button[data-tab-group]').forEach(button => {
+    button.addEventListener('click', () => {
+      const group = button.dataset.tabGroup;
+      const target = button.dataset.tab;
+      const container = button.closest('.tab-panel');
+      if (!container) return;
+      container.querySelectorAll(`.tab-button[data-tab-group="${group}"]`).forEach(item => item.classList.toggle('active', item === button));
+      container.querySelectorAll(`[data-tab-panel^="${group}-"]`).forEach(panel => {
+        panel.classList.toggle('active', panel.dataset.tabPanel === `${group}-${target}`);
+      });
+      const exportButton = container.querySelector('.tab-content.active [data-export]');
+      if (exportButton) exportButton.setAttribute('aria-label', 'Xuất dữ liệu của tab đang xem');
+    });
+  });
+
+  // Method and action dialogs.
+  const methodDialog = document.getElementById('method-dialog');
+  document.getElementById('method-open')?.addEventListener('click', () => methodDialog.showModal());
+  document.getElementById('method-close')?.addEventListener('click', () => methodDialog.close());
+  document.getElementById('method-ok')?.addEventListener('click', () => methodDialog.close());
+  methodDialog?.addEventListener('click', event => {
+    if (event.target === methodDialog) methodDialog.close();
+  });
+
+  const actionDialog = document.getElementById('action-dialog');
+  const actionReason = document.getElementById('action-reason');
+  function closeActionDialog() {
+    pendingMapping = null;
+    actionReason.value = '';
+    actionDialog.close();
+  }
+  document.getElementById('action-close')?.addEventListener('click', closeActionDialog);
+  document.getElementById('action-cancel')?.addEventListener('click', closeActionDialog);
+  actionDialog?.addEventListener('click', event => {
+    if (event.target === actionDialog) closeActionDialog();
+  });
+
+  function statusBadge(status) {
+    const span = document.createElement('span');
+    span.className = `status-label ${status === 'mapped' ? 'mapped-status' : status === 'ignored' ? 'ignored-status' : 'pending-status'}`;
+    span.textContent = status;
+    return span;
+  }
+
+  function getRowMeta(row) {
+    const cells = row.cells;
+    return {
+      type: row.dataset.type || cells[0]?.textContent.trim() || '',
+      source: cells[1]?.textContent.trim() || '',
+      rawLabel: cells[2]?.querySelector('strong')?.textContent.trim() || cells[2]?.textContent.trim() || '',
+      oldStatus: row.dataset.status || 'unmapped',
+      actionSelect: row.querySelector('.row-action'),
+      masterSelect: row.querySelector('.row-master')
+    };
+  }
+
+  function appendLog(meta, newValue, actionLabel, reason) {
+    const body = document.getElementById('mapping-log-body');
+    const tr = document.createElement('tr');
+    const now = new Date();
+    const stamp = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const typeLabels = { industry: 'Ngành', occupation: 'Nghề', location: 'Địa điểm', experience: 'Kinh nghiệm', role: 'Cấp bậc' };
+    const values = [stamp, 'BA', 'BA', typeLabels[meta.type] || meta.type, meta.source, meta.rawLabel, meta.oldStatus, newValue, actionLabel, reason || 'Cập nhật từ mockup'];
+    values.forEach(value => {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    body.prepend(tr);
+  }
+
+  function updateQueueCounters() {
+    const rows = Array.from(document.querySelectorAll('#mapping-queue-body tr'));
+    const unmapped = rows.filter(row => row.dataset.status === 'unmapped').length;
+    const count = document.getElementById('queue-kpi');
+    const count2 = document.getElementById('queue-unmapped');
+    const tabCount = document.getElementById('queue-tab-count');
+    const navCount = document.getElementById('sidebar-unmapped-count');
+    if (count) count.textContent = unmapped;
+    if (count2) count2.textContent = unmapped;
+    if (tabCount) tabCount.textContent = unmapped;
+    if (navCount) navCount.textContent = unmapped;
+    applyQueueFilters();
+  }
+
+  function startMapping(row) {
+    const meta = getRowMeta(row);
+    const action = meta.actionSelect?.value;
+    if (!action) {
+      showToast('Vui lòng chọn hành động cần thực hiện.');
+      return;
+    }
+    const target = meta.masterSelect?.value || '';
+    if (action === 'map' && !target) {
+      showToast('Vui lòng chọn master đích trước khi ánh xạ.');
+      meta.masterSelect?.focus();
+      return;
+    }
+    pendingMapping = { row, meta, action, target };
+    const title = document.getElementById('action-dialog-title');
+    const desc = document.getElementById('action-dialog-description');
+    const hint = document.getElementById('action-dialog-hint');
+    const labels = {
+      map: 'Ánh xạ nhãn vào master có sẵn',
+      add: 'Đề nghị thêm master mới',
+      ignore: 'Đánh dấu nhãn là ignored'
+    };
+    title.textContent = labels[action];
+    desc.textContent = `Nhãn “${meta.rawLabel}” từ ${meta.source}. ${action === 'map' ? `Master đích: ${target}.` : action === 'add' ? 'Nhãn sẽ vẫn ở trạng thái unmapped cho tới khi Tech Lead bổ sung master.' : 'Nhãn vẫn được lưu và các tin liên quan vẫn nằm trong tổng chưa phân loại.'}`;
+    hint.textContent = action === 'map'
+      ? 'Ghi chú là tùy chọn. Ánh xạ có hiệu lực ngay trong view phân tích.'
+      : 'Vui lòng nhập lý do / ghi chú để lưu nhật ký thay đổi.';
+    actionReason.value = '';
+    actionDialog.showModal();
+    if (action !== 'map') actionReason.focus();
+  }
+
+  document.querySelectorAll('.apply-mapping').forEach(button => {
+    button.addEventListener('click', () => startMapping(button.closest('tr')));
+  });
+
+  document.getElementById('action-confirm')?.addEventListener('click', () => {
+    if (!pendingMapping) return;
+    const { row, meta, action, target } = pendingMapping;
+    const reason = actionReason.value.trim();
+    if (action !== 'map' && !reason) {
+      showToast('Hành động này cần ghi rõ lý do trong nhật ký.');
+      actionReason.focus();
+      return;
+    }
+
+    let newStatus = 'unmapped';
+    let newValue = 'unmapped (chờ master mới)';
+    let actionLabel = 'Đề nghị thêm master';
+    if (action === 'map') {
+      newStatus = 'mapped';
+      newValue = target;
+      actionLabel = 'Ánh xạ';
+    } else if (action === 'ignore') {
+      newStatus = 'ignored';
+      newValue = 'ignored';
+      actionLabel = 'Bỏ qua';
+    }
+
+    row.dataset.status = newStatus;
+    const statusCell = row.cells[7];
+    statusCell.replaceChildren(statusBadge(newStatus));
+    const actionCell = row.cells[5];
+    actionCell.textContent = action === 'map' ? 'Ánh xạ vào master có sẵn' : action === 'ignore' ? 'Bỏ qua (ignored)' : 'Đề nghị thêm master mới';
+    const masterCell = row.cells[6];
+    if (action === 'map') masterCell.textContent = target;
+    else if (action === 'ignore') masterCell.textContent = '—';
+    else masterCell.textContent = 'Chờ Tech Lead bổ sung';
+    const actionButtonCell = row.cells[8];
+    actionButtonCell.textContent = '—';
+    appendLog(meta, newValue, actionLabel, reason);
+    updateQueueCounters();
+    closeActionDialog();
+    showToast(action === 'add' ? 'Đã ghi nhận đề nghị. Nhãn vẫn ở trạng thái unmapped.' : 'Đã cập nhật trạng thái nhãn và ghi nhật ký.');
+  });
+
+  // Queue type/status/search filters.
+  function applyQueueFilters() {
+    const type = document.getElementById('queue-type-filter')?.value || 'all';
+    const status = document.getElementById('queue-status-filter')?.value || 'all';
+    const query = (document.getElementById('queue-search')?.value || '').trim().toLocaleLowerCase('vi');
+    document.querySelectorAll('#mapping-queue-body tr').forEach(row => {
+      const rowText = row.textContent.toLocaleLowerCase('vi');
+      const visible = (type === 'all' || row.dataset.type === type)
+        && (status === 'all' || row.dataset.status === status)
+        && (!query || rowText.includes(query));
+      row.hidden = !visible;
+    });
+  }
+  ['queue-type-filter', 'queue-status-filter'].forEach(id => document.getElementById(id)?.addEventListener('change', applyQueueFilters));
+  document.getElementById('queue-search')?.addEventListener('input', applyQueueFilters);
+  document.querySelectorAll('[data-open-quality-tab="queue"]').forEach(button => button.addEventListener('click', () => {
+    document.querySelector('[data-tab-group="quality"][data-tab="queue"]')?.click();
+  }));
+
+  // Search visible rows in individual analysis tables.
+  document.querySelectorAll('[data-search-table]').forEach(input => {
+    input.addEventListener('input', () => {
+      const table = document.getElementById(input.dataset.searchTable);
+      if (!table) return;
+      const query = input.value.trim().toLocaleLowerCase('vi');
+      table.querySelectorAll('tbody tr').forEach(row => {
+        row.hidden = !row.textContent.toLocaleLowerCase('vi').includes(query);
+      });
+    });
+  });
+
+  // CSV export for visible table rows; UTF-8 BOM supports Vietnamese in Excel.
+  function exportTable(tableId) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const rows = Array.from(table.querySelectorAll('tr')).filter(row => !row.hidden);
+    const csv = rows.map(row => Array.from(row.children).map(cell => {
+      const value = cell.innerText.replace(/\s+/g, ' ').trim();
+      return `"${value.replace(/"/g, '""')}"`;
+    }).join(',')).join('\r\n');
+    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${tableId}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    showToast('Đã tạo file CSV từ bảng đang hiển thị.');
+  }
+  document.querySelectorAll('[data-export]').forEach(button => button.addEventListener('click', () => exportTable(button.dataset.export)));
+
+  // Dismissible dashboard notice.
+  document.querySelectorAll('.notice-close').forEach(button => button.addEventListener('click', () => button.closest('.notice')?.remove()));
+
+  updateFilterSummary();
+  updateQueueCounters();
+})();
+
+  </script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+code,name,industry_code
+OCC01,Lập trình viên Backend,IND01
+OCC02,Lập trình viên Frontend,IND01
+OCC03,Kiểm thử phần mềm (QA/QC),IND01
+OCC04,Phân tích nghiệp vụ (BA),IND01
+OCC05,Kỹ sư cơ khí,IND02
+OCC06,Công nhân vận hành máy,IND02
+OCC07,Quản lý sản xuất,IND02
+OCC08,Nhân viên kinh doanh,IND03
+OCC09,Chăm sóc khách hàng,IND03
+OCC10,Kế toán tổng hợp,IND04
+OCC11,Chuyên viên tín dụng,IND04
+OCC12,Digital Marketing,IND05
+OCC13,Content Marketing,IND05
+OCC14,Nhân viên xuất nhập khẩu,IND06
+OCC15,Nhân viên kho vận,IND06
+OCC16,Giáo viên ngoại ngữ,IND07
+OCC17,Tư vấn tuyển sinh,IND07
+OCC18,Điều dưỡng,IND08
+OCC19,Dược sĩ,IND08
+OCC20,Kỹ sư xây dựng,IND09
+OCC21,Nhân viên kinh doanh BĐS,IND09
+OCC22,Nhân viên phục vụ,IND10
+OCC23,Đầu bếp,IND10
+OCC24,Chuyên viên tuyển dụng,IND11
+OCC25,Hành chính văn phòng,IND11
+OCC26,Kỹ sư điện,IND12
+OCC27,Kỹ thuật viên điện tử,IND12

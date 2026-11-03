@@ -1,0 +1,199 @@
+alias,province_code,note
+Hà Nội,HN,
+Ha Noi,HN,
+Hanoi,HN,
+Huế,HUE,
+Thừa Thiên Huế,HUE,tên cũ
+Thừa Thiên - Huế,HUE,tên cũ
+TP Huế,HUE,
+Cao Bằng,CB,
+Điện Biên,DB,
+Lai Châu,LCH,
+Sơn La,SL,
+Lạng Sơn,LS,
+Quảng Ninh,QNI,
+Thanh Hóa,TH,
+Thanh Hoá,TH,
+Nghệ An,NA,
+Hà Tĩnh,HT,
+Tuyên Quang,TQ,
+Hà Giang,TQ,sáp nhập 2025
+Lào Cai,LCI,
+Yên Bái,LCI,sáp nhập 2025
+Thái Nguyên,TN,
+Bắc Kạn,TN,sáp nhập 2025
+Bắc Cạn,TN,sáp nhập 2025
+Phú Thọ,PT,
+Vĩnh Phúc,PT,sáp nhập 2025
+Hòa Bình,PT,sáp nhập 2025
+Hoà Bình,PT,sáp nhập 2025
+Bắc Ninh,BN,
+Bắc Giang,BN,sáp nhập 2025
+Hưng Yên,HY,
+Thái Bình,HY,sáp nhập 2025
+Hải Phòng,HP,
+Hai Phong,HP,
+Hải Dương,HP,sáp nhập 2025
+Ninh Bình,NB,
+Hà Nam,NB,sáp nhập 2025
+Nam Định,NB,sáp nhập 2025
+Quảng Trị,QT,
+Quảng Bình,QT,sáp nhập 2025
+Đà Nẵng,DN,
+Da Nang,DN,
+Quảng Nam,DN,sáp nhập 2025
+Quảng Ngãi,QNG,
+Kon Tum,QNG,sáp nhập 2025
+Gia Lai,GL,
+Bình Định,GL,sáp nhập 2025
+Đắk Lắk,DL,
+Đăk Lăk,DL,
+Phú Yên,DL,sáp nhập 2025
+Khánh Hòa,KH,
+Khánh Hoà,KH,
+Ninh Thuận,KH,sáp nhập 2025
+Lâm Đồng,LD,
+Đắk Nông,LD,sáp nhập 2025
+Đăk Nông,LD,sáp nhập 2025
+Bình Thuận,LD,sáp nhập 2025
+Đồng Nai,DNA,
+Bình Phước,DNA,sáp nhập 2025
+TP. Hồ Chí Minh,HCM,
+TP.HCM,HCM,
+TPHCM,HCM,
+TP HCM,HCM,
+HCM,HCM,
+Hồ Chí Minh,HCM,
+Thành phố Hồ Chí Minh,HCM,
+Ho Chi Minh,HCM,
+Ho Chi Minh City,HCM,
+Sài Gòn,HCM,
+Bình Dương,HCM,sáp nhập 2025
+Bà Rịa - Vũng Tàu,HCM,sáp nhập 2025
+Bà Rịa Vũng Tàu,HCM,sáp nhập 2025
+Vũng Tàu,HCM,sáp nhập 2025
+Tây Ninh,TNI,
+Long An,TNI,sáp nhập 2025
+Đồng Tháp,DT,
+Tiền Giang,DT,sáp nhập 2025
+Vĩnh Long,VL,
+Bến Tre,VL,sáp nhập 2025
+Trà Vinh,VL,sáp nhập 2025
+An Giang,AG,
+Kiên Giang,AG,sáp nhập 2025
+Cần Thơ,CT,
+Can Tho,CT,
+Sóc Trăng,CT,sáp nhập 2025
+Hậu Giang,CT,sáp nhập 2025
+Cà Mau,CM,
+Bạc Liêu,CM,sáp nhập 2025
+Ba Đình,HN,quận Hà Nội
+Hoàn Kiếm,HN,quận Hà Nội
+Tây Hồ,HN,quận Hà Nội
+Long Biên,HN,quận Hà Nội
+Cầu Giấy,HN,quận Hà Nội
+Đống Đa,HN,quận Hà Nội
+Hai Bà Trưng,HN,quận Hà Nội
+Thanh Xuân,HN,quận Hà Nội
+Sóc Sơn,HN,huyện Hà Nội
+Đông Anh,HN,huyện Hà Nội
+Gia Lâm,HN,huyện Hà Nội
+Nam Từ Liêm,HN,quận Hà Nội
+Bắc Từ Liêm,HN,quận Hà Nội
+Từ Liêm,HN,quận Hà Nội (cũ)
+Thanh Trì,HN,huyện Hà Nội
+Mê Linh,HN,huyện Hà Nội
+Hà Đông,HN,quận Hà Nội
+Ba Vì,HN,huyện Hà Nội
+Đan Phượng,HN,huyện Hà Nội
+Hoài Đức,HN,huyện Hà Nội
+Quốc Oai,HN,huyện Hà Nội
+Thạch Thất,HN,huyện Hà Nội
+Chương Mỹ,HN,huyện Hà Nội
+Thanh Oai,HN,huyện Hà Nội
+Thường Tín,HN,huyện Hà Nội
+Phú Xuyên,HN,huyện Hà Nội
+Ứng Hòa,HN,huyện Hà Nội
+Mỹ Đức,HN,huyện Hà Nội
+Quận 1,HCM,quận TP.HCM
+Quận 2,HCM,quận TP.HCM (cũ)
+Quận 3,HCM,quận TP.HCM
+Quận 4,HCM,quận TP.HCM
+Quận 5,HCM,quận TP.HCM
+Quận 6,HCM,quận TP.HCM
+Quận 7,HCM,quận TP.HCM
+Quận 8,HCM,quận TP.HCM
+Quận 9,HCM,quận TP.HCM (cũ)
+Quận 10,HCM,quận TP.HCM
+Quận 11,HCM,quận TP.HCM
+Quận 12,HCM,quận TP.HCM
+Bình Thạnh,HCM,quận TP.HCM
+Gò Vấp,HCM,quận TP.HCM
+Phú Nhuận,HCM,quận TP.HCM
+Tân Bình,HCM,quận TP.HCM
+Thủ Đức,HCM,TP Thủ Đức
+Củ Chi,HCM,huyện TP.HCM
+Hóc Môn,HCM,huyện TP.HCM
+Bình Chánh,HCM,huyện TP.HCM
+Nhà Bè,HCM,huyện TP.HCM
+Cần Giờ,HCM,huyện TP.HCM
+Thủ Dầu Một,HCM,Bình Dương cũ
+Dĩ An,HCM,Bình Dương cũ
+Thuận An,HCM,Bình Dương cũ
+Bến Cát,HCM,Bình Dương cũ
+Bàu Bàng,HCM,Bình Dương cũ
+Vũng Tàu,HCM,Bà Rịa - Vũng Tàu cũ
+Bà Rịa,HCM,Bà Rịa - Vũng Tàu cũ
+Biên Hòa,DNA,Đồng Nai
+Biên Hoà,DNA,Đồng Nai
+Long Khánh,DNA,Đồng Nai
+Nhơn Trạch,DNA,Đồng Nai
+Đồng Xoài,DNA,Bình Phước cũ
+Nha Trang,KH,Khánh Hòa
+Cam Ranh,KH,Khánh Hòa
+Phan Rang,KH,Ninh Thuận cũ
+Phan Rang - Tháp Chàm,KH,Ninh Thuận cũ
+Vinh,NA,Nghệ An
+Buôn Ma Thuột,DL,Đắk Lắk
+Tuy Hòa,DL,Phú Yên cũ
+Hạ Long,QNI,Quảng Ninh
+Cẩm Phả,QNI,Quảng Ninh
+Uông Bí,QNI,Quảng Ninh
+Móng Cái,QNI,Quảng Ninh
+Hồng Bàng,HP,quận Hải Phòng
+Ngô Quyền,HP,quận Hải Phòng
+Lê Chân,HP,quận Hải Phòng
+Hải An,HP,quận Hải Phòng
+Kiến An,HP,quận Hải Phòng
+Thủy Nguyên,HP,Hải Phòng
+Thuỷ Nguyên,HP,Hải Phòng
+Hải Châu,DN,quận Đà Nẵng
+Thanh Khê,DN,quận Đà Nẵng
+Sơn Trà,DN,quận Đà Nẵng
+Ngũ Hành Sơn,DN,quận Đà Nẵng
+Liên Chiểu,DN,quận Đà Nẵng
+Cẩm Lệ,DN,quận Đà Nẵng
+Hòa Vang,DN,huyện Đà Nẵng
+Hội An,DN,Quảng Nam cũ
+Tam Kỳ,DN,Quảng Nam cũ
+Đà Lạt,LD,Lâm Đồng
+Bảo Lộc,LD,Lâm Đồng
+Phan Thiết,LD,Bình Thuận cũ
+Pleiku,GL,Gia Lai
+Quy Nhơn,GL,Bình Định cũ
+Từ Sơn,BN,Bắc Ninh
+Ninh Kiều,CT,quận Cần Thơ
+Vĩnh Yên,PT,Vĩnh Phúc cũ
+Phúc Yên,PT,Vĩnh Phúc cũ
+Việt Trì,PT,Phú Thọ
+Phủ Lý,NB,Hà Nam cũ
+Mỹ Tho,DT,Tiền Giang cũ
+Rạch Giá,AG,Kiên Giang cũ
+Phú Quốc,AG,Kiên Giang cũ
+Long Xuyên,AG,An Giang
+Yên Mỹ,HY,huyện Hưng Yên
+Mỹ Hào,HY,thị xã Hưng Yên
+Long Thành,DNA,huyện Đồng Nai
+Bến Lức,TNI,Long An cũ
+Cẩm Giàng,HP,Hải Dương cũ
+Điện Bàn,DN,Quảng Nam cũ

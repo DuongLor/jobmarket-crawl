@@ -1,0 +1,7 @@
+code,name,min_months,max_months,sort_order
+NONE,Chưa có kinh nghiệm,0,1,1
+LT_1Y,Dưới 1 năm,1,12,2
+Y1_2,1 – dưới 2 năm,12,24,3
+Y2_3,2 – dưới 3 năm,24,36,4
+Y3_5,3 – dưới 5 năm,36,60,5
+Y5P,Từ 5 năm trở lên,60,,6

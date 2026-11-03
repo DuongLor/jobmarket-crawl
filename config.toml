@@ -1,0 +1,78 @@
+# Mọi ngưỡng và tham số nằm ở đây (PLAN BR-11) — không viết cứng trong code.
+
+[paths]
+data_dir = "data"
+db_file = "data/market.db"
+raw_dir = "data/raw"
+
+[crawl]
+user_agent = "jobmarket-crawl/0.1 (personal, non-commercial, low-rate)"
+min_delay_seconds = 2.5
+timeout_seconds = 30
+max_retries = 2
+# Dừng một nguồn khi tỷ lệ request lỗi trong lần chạy vượt ngưỡng này
+stop_error_rate = 0.2
+# Tin không còn thấy trên nguồn quá N ngày → trạng thái 'expired' (chỉ đánh dấu sau lần chạy có dữ liệu)
+expire_unseen_days = 14
+
+[sources.topcv]
+# TẮT 2026-11-03: TopCV chặn bot tự khai danh tính (Cloudflare challenge) — dữ liệu TopCV chỉ vào qua
+# `import-html` (trang bạn tự lưu). Không đổi User-Agent để né chặn. Xem docs/spike-0.md.
+enabled = false
+start_url = "https://www.topcv.vn/tim-viec-lam-moi-nhat"
+
+# Nguồn có phân trang: mỗi đêm duyệt tối đa `max_pages` trang mỗi danh sách, dừng sớm khi
+# `stop_after_known_pages` trang liên tiếp không có tin mới. Lần đầu muốn lấy nhiều: `run --max-pages 40`.
+[sources.careerlink]
+enabled = true
+start_url = "https://www.careerlink.vn/vieclam/list"
+# 2026-11-03: CareerLink hạn chế ngầm (trả trang không có tin, HTTP 200) sau ~25 request/1 phút và ~55 request/9 phút
+# → giới hạn theo SỐ request trong một khoảng thời gian; tự gỡ sau ~3,5 giờ. Tôn trọng: mỗi lần chạy ≤ ~50 request
+# (35 danh sách + 15 chi tiết), lịch 4 lần/ngày cách 6 giờ (scripts/run_nightly.ps1), dừng ngay khi phát hiện.
+min_delay_seconds = 10
+max_requests = 35
+max_pages = 10
+stop_after_known_pages = 3
+# Tầng 2: số trang chi tiết (JSON-LD: ngành, kinh nghiệm, ngày đăng, hạn nộp) đọc mỗi lần chạy, mới nhất trước
+detail_max_per_run = 15
+# Duyệt thêm trang theo ngành/tỉnh tự phát hiện trên trang (gắn được ngành cho tin)
+max_listings = 150
+
+[sources.jobsgo]
+# TẮT 2026-11-03: lần chạy thật bị 403 challenge ngay trang đầu (khảo sát bằng curl trước đó vẫn 200).
+# Không chỉnh header/giả lập để né. Có thể thử bật lại sau vài ngày: `run --source jobsgo --max-pages 1`.
+enabled = false
+# Duyệt theo từng ngành cấp 1 (~32 ngành) để biết ngành của tin
+start_url = "https://jobsgo.vn/viec-lam.html"
+max_pages = 5
+stop_after_known_pages = 2
+
+[normalize]
+fx_usd_vnd = 25500
+salary_min_valid = 3_000_000
+salary_max_valid = 500_000_000
+week_to_month = 4.33
+hour_to_month = 208
+
+[stats]
+min_n_salary = 5
+min_vol_trend = 10
+trend_threshold = 0.10
+window_days = 30
+# Nguồn không cho biết trạng thái tin: coi là đang tuyển nếu thấy trong N ngày gần nhất
+active_seen_days = 7
+# Khoảng lương rộng hơn N lần (vd 10–200 triệu "lương cứng + hoa hồng") → không vào thống kê lương; 0 = tắt
+max_range_ratio = 5
+# Tin chưa có ngày đăng mà thấy lần đầu trong N ngày đầu tiên thu thập nguồn = tồn sẵn → không tính là tin mới
+backlog_grace_days = 0
+
+[quality]
+# Ngưỡng chất lượng theo nguồn (tab Quality của mockup)
+max_reject = 0.02
+min_location = 0.95
+min_industry = 0.90
+min_occupation = 0.80
+min_experience = 0.90
+# Huy hiệu độ tin cậy (PLAN §B6): Cao nếu n ≥ high_n và mọi chỉ số phủ đạt; Vừa nếu n ≥ mid_n; còn lại Thấp
+confidence_high_n = 30
+confidence_mid_n = 10

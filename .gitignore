@@ -1,0 +1,23 @@
+# Dữ liệu crawl, DB, bản gốc, file xuất — không commit
+data/*
+!data/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Môi trường
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+# IDE / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

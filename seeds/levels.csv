@@ -1,0 +1,8 @@
+code,name,rank_order
+INTERN,Thực tập sinh,1
+JUNIOR,Nhân viên mới (Junior),2
+STAFF,Nhân viên,3
+SENIOR,Nhân viên cấp cao (Senior),4
+LEAD,Trưởng nhóm,5
+MANAGER,Quản lý / Trưởng phòng,6
+DIRECTOR,Giám đốc,7

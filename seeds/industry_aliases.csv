@@ -1,0 +1,13 @@
+alias,industry_code,note
+Sản xuất,IND02,CareerLink danh mục /viec-lam/san-xuat-van-hanh-san-xuat/23
+Bán hàng / Kinh doanh,IND03,CareerLink /viec-lam/ban-hang-kinh-doanh/31
+IT - Phần mềm,IND01,CareerLink /viec-lam/it-phan-mem/19
+IT - Phần cứng / Mạng,IND01,CareerLink /viec-lam/it-phan-cung-mang/130
+Xây dựng,IND09,CareerLink /viec-lam/xay-dung/8
+Kế toán,IND04,CareerLink /viec-lam/ke-toan/1
+Ngân hàng,IND04,CareerLink /viec-lam/ngan-hang/5
+Khách sạn,IND10,CareerLink JSON-LD industry
+Tiếng Nhật,,danh mục ngoại ngữ — yêu cầu kỹ năng, không phải ngành → bỏ qua để tin nhận ngành thật
+Tiếng Anh,,danh mục ngoại ngữ — bỏ qua
+Tiếng Hàn,,danh mục ngoại ngữ — bỏ qua
+Tiếng Trung,,danh mục ngoại ngữ — bỏ qua
