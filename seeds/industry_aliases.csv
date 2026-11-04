@@ -7,7 +7,101 @@ Xây dựng,IND09,CareerLink /viec-lam/xay-dung/8
 Kế toán,IND04,CareerLink /viec-lam/ke-toan/1
 Ngân hàng,IND04,CareerLink /viec-lam/ngan-hang/5
 Khách sạn,IND10,CareerLink JSON-LD industry
-Tiếng Nhật,,danh mục ngoại ngữ — yêu cầu kỹ năng, không phải ngành → bỏ qua để tin nhận ngành thật
+Tiếng Nhật,,"danh mục ngoại ngữ — yêu cầu kỹ năng, không phải ngành → bỏ qua để tin nhận ngành thật"
 Tiếng Anh,,danh mục ngoại ngữ — bỏ qua
 Tiếng Hàn,,danh mục ngoại ngữ — bỏ qua
 Tiếng Trung,,danh mục ngoại ngữ — bỏ qua
+Sản xuất / Vận hành sản xuất,IND02,CareerLink JSON-LD industry (trang chi tiết; danh sách nhiều mục cách nhau dấu phẩy)
+Kỹ thuật ứng dụng / Cơ khí,IND02,CareerLink JSON-LD
+Quản lý chất lượng (QA / QC),IND02,CareerLink JSON-LD
+Dệt may / Da giày,IND02,CareerLink JSON-LD
+Hóa chất / Sinh hóa / Thực phẩm,IND02,CareerLink JSON-LD — sản xuất hoá chất/thực phẩm
+Điện / Điện tử,IND12,CareerLink JSON-LD
+Kế toán / Kiểm toán,IND04,CareerLink JSON-LD
+Vận chuyển / Giao thông / Kho bãi,IND06,CareerLink JSON-LD
+Xuất nhập khẩu / Ngoại thương,IND06,CareerLink JSON-LD
+Biên phiên dịch / Thông dịch viên,IND15,CareerLink JSON-LD
+Dịch vụ khách hàng,IND10,CareerLink JSON-LD — nhóm dịch vụ
+Khác,,mục "Khác" không cho biết ngành → bỏ qua
+Kinh doanh/Bán hàng,IND03,TopCV danh mục cr1
+Marketing/PR/Quảng cáo,IND05,TopCV cr92
+Chăm sóc khách hàng (Customer Service)/Vận hành,IND10,TopCV cr158 — nhóm dịch vụ
+Nhân sự/Hành chính/Pháp chế,IND11,TopCV cr177
+Tài chính/Ngân hàng/Bảo hiểm,IND04,TopCV cr206
+Bất động sản,IND09,TopCV cr333
+Kế toán/Kiểm toán/Thuế,IND04,TopCV cr392
+Giáo dục/Đào tạo,IND07,TopCV cr477
+Bán lẻ/Dịch vụ đời sống,IND10,TopCV cr544
+Phim và truyền hình/Báo chí/Xuất bản,IND05,TopCV cr612 — truyền thông
+Điện/Điện tử/Viễn thông,IND12,TopCV cr644
+Logistics/Thu mua/Kho/Vận tải,IND06,TopCV cr711
+Dược/Y tế/Sức khoẻ/Công nghệ sinh học,IND08,TopCV cr781
+Thiết kế,IND13,TopCV cr826
+Nhà hàng/Khách sạn/Du lịch,IND10,TopCV cr857
+Năng lượng/Môi trường/Nông nghiệp,IND14,TopCV cr883
+Tài xế,IND06,TopCV cr1010 — vận tải
+Biên phiên dịch,IND15,TopCV cr1013
+Nhóm nghề khác,,TopCV cr899 — không cho biết ngành → bỏ qua
+Hành chính - Thư ký,IND11,Việc Làm 24h nghề 1
+An ninh - Bảo vệ,IND10,Việc Làm 24h nghề 2 — nhóm dịch vụ
+Thiết kế - Sáng tạo nghệ thuật,IND13,Việc Làm 24h nghề 3
+Kiến trúc - Thiết kế nội ngoại thất,IND09,Việc Làm 24h nghề 4
+Khách sạn - Nhà hàng - Du lịch,IND10,Việc Làm 24h nghề 5
+Bán sỉ - Bán lẻ - Quản lý cửa hàng,IND03,Việc Làm 24h nghề 6
+Sản xuất - Lắp ráp - Chế biến,IND02,Việc Làm 24h nghề 9
+Vận hành - Bảo trì - Bảo dưỡng,IND02,Việc Làm 24h nghề 10
+Nông - Lâm - Ngư nghiệp,IND14,Việc Làm 24h nghề 11
+Marketing,IND05,Việc Làm 24h nghề 12
+Thu mua - Kho Vận - Chuỗi cung ứng,IND06,Việc Làm 24h nghề 14
+Xuất Nhập Khẩu,IND06,Việc Làm 24h nghề 15
+Vận Tải - Lái xe - Giao nhận,IND06,Việc Làm 24h nghề 16
+Tài chính - Đầu tư - Chứng Khoán,IND04,Việc Làm 24h nghề 18
+Y tế - Chăm sóc sức khỏe,IND08,Việc Làm 24h nghề 21
+Nhân sự,IND11,Việc Làm 24h nghề 22
+Bảo hiểm,IND04,Việc Làm 24h nghề 23
+Thông tin - Truyền thông - Quảng cáo,IND05,Việc Làm 24h nghề 24
+Kiểm toán,IND04,Việc Làm 24h nghề 26
+Quản lý tiêu chuẩn và chất lượng,IND02,Việc Làm 24h nghề 28
+Chăm sóc khách hàng,IND10,Việc Làm 24h nghề 30 — nhóm dịch vụ
+Nghề nghiệp khác,,Việc Làm 24h nghề 35 — không cho biết ngành → bỏ qua
+An toàn lao động,IND02,Việc Làm 24h nghề 36
+Bưu chính viễn thông,IND12,Việc Làm 24h nghề 38
+Dệt may - Da giày - Thời trang,IND02,Việc Làm 24h nghề 40
+Điện - Điện tử - Điện lạnh,IND12,Việc Làm 24h nghề 41
+Dược phẩm,IND08,Việc Làm 24h nghề 42
+Hóa học - Hóa sinh,IND02,Việc Làm 24h nghề 43
+Môi trường - Xử lý chất thải,IND14,Việc Làm 24h nghề 44
+Thực phẩm - Đồ uống,IND02,Việc Làm 24h nghề 45 — sản xuất thực phẩm
+Chăn nuôi - Thú y,IND14,Việc Làm 24h nghề 46
+Cơ khí - Ô tô - Tự động hóa,IND02,Việc Làm 24h nghề 47
+Công nghệ thực phẩm - Dinh dưỡng,IND02,Việc Làm 24h nghề 48
+Truyền hình - Báo chí - Biên tập,IND05,Việc Làm 24h nghề 51
+Xuất bản - In ấn,IND05,Việc Làm 24h nghề 52
+Thực tập sinh,,"Việc Làm 24h nghề 53 — cấp bậc, không phải ngành → bỏ qua"
+Bán Hàng Kỹ Thuật,IND03,CareerViet ul.welfare
+Bán lẻ / Bán sỉ,IND03,CareerViet ul.welfare
+Bảo trì / Sửa chữa,IND02,CareerViet ul.welfare
+CNTT - Phần cứng / Mạng,IND01,CareerViet ul.welfare
+CNTT - Phần mềm,IND01,CareerViet ul.welfare
+Chứng khoán,IND04,CareerViet ul.welfare
+Du lịch,IND10,CareerViet ul.welfare
+Dược phẩm/ Hóa Mỹ Phẩm,IND08,CareerViet ul.welfare
+Hóa học,IND02,CareerViet ul.welfare
+Kiến trúc,IND09,CareerViet ul.welfare
+Môi trường,IND14,CareerViet ul.welfare
+Mỹ thuật / Nghệ thuật / Thiết kế,IND13,CareerViet ul.welfare
+Nhà hàng / Khách sạn,IND10,CareerViet ul.welfare
+Nội ngoại thất,IND09,CareerViet ul.welfare
+Quảng cáo / Đối ngoại / Truyền Thông,IND05,CareerViet ul.welfare
+Thu mua / Vật tư,IND06,CareerViet ul.welfare
+Thương mại điện tử,IND03,CareerViet ul.welfare
+Tiếp thị / Marketing,IND05,CareerViet ul.welfare
+Tiếp thị trực tuyến,IND05,CareerViet ul.welfare
+Trắc địa / Địa Chất,IND09,CareerViet ul.welfare
+Thủy lợi,IND09,CareerViet ul.welfare
+Tài chính / Đầu tư,IND04,CareerViet ul.welfare
+Y tế / Chăm sóc sức khỏe / Thẩm mỹ / Làm đẹp,IND08,CareerViet ul.welfare
+Điện / Điện tử / Điện lạnh / Điện công nghiệp,IND12,CareerViet ul.welfare
+Vận chuyển / Giao nhận / Kho vận,IND06,CareerViet ul.welfare
+Nông nghiệp,IND14,CareerViet ul.welfare
+Đồ gỗ,IND02,CareerViet ul.welfare — sản xuất đồ gỗ

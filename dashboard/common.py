@@ -24,7 +24,14 @@ PERIODS = {
     "Toàn bộ": None,
 }
 DEFAULT_PERIOD = "6 tháng gần nhất"
-SOURCE_NAMES = {"topcv": "TopCV", "vietnamworks": "VietnamWorks", "careerlink": "CareerLink", "vietjobs": "VietJobs"}
+SOURCE_NAMES = {
+    "topcv": "TopCV",
+    "vietnamworks": "VietnamWorks",
+    "careerlink": "CareerLink",
+    "vietjobs": "VietJobs",
+    "vieclam24h": "Việc Làm 24h",
+    "careerviet": "CareerViet",
+}
 # Bộ dữ liệu lịch sử (ảnh chụp một lần, không có ngày đăng từng tin) — KHÔNG trộn với dữ liệu crawl hằng ngày
 HISTORICAL_SOURCES = {"vietjobs"}
 DATASETS = {"current": "Thị trường hiện tại (crawl hằng ngày)", "history": "Lịch sử 07–10/2025 (VietJobs)"}
@@ -183,9 +190,9 @@ def page_header(ctx: Context, code: str, title: str, subtitle: str) -> None:
         notes = []
         if unknown:
             notes.append(
-                f"**{fmt_int(unknown)} tin chưa rõ ngày đăng** (đã có sẵn khi bắt đầu thu thập) — vẫn tính vào phân "
-                "bố ngành/địa phương/lương, nhưng **không** tính là tin mới hay vào xu hướng; ngày đăng được bổ sung "
-                "dần từ trang chi tiết."
+                f"**{fmt_int(unknown)} tin tồn sẵn** (chưa rõ ngày đăng, hoặc đăng/làm mới trước ngày bắt đầu thu "
+                "thập) — vẫn tính vào phân bố ngành/địa phương/lương, nhưng **không** tính là tin mới, theo tháng "
+                "hay xu hướng (trước ngày bắt đầu chỉ còn thấy tin chưa hết hạn → các tháng cũ luôn thiếu)."
             )
         if wide:
             notes.append(
@@ -228,6 +235,37 @@ def snapshot_note(what: str) -> None:
 def has_dates(ctx: Context) -> bool:
     """Bộ đang xem có tin nào biết ngày đăng không — không có thì chỉ số theo thời gian là "—", không phải 0."""
     return bool(len(ctx.df)) and bool(ctx.df["date_known"].any())
+
+
+def active_help(o: dict) -> str:
+    """Giải thích thẻ "Đang tuyển" — kèm số tin chưa xác định được trạng thái."""
+    text = "Trạng thái đang tuyển và chưa quá hạn tại ngày chốt."
+    if o.get("status_undetermined"):
+        text += (
+            f" Thêm {fmt_int(o['status_undetermined'])} tin CHƯA XÁC ĐỊNH (không có hạn nộp, nguồn chưa quét trọn "
+            "một vòng nên chưa biết tin nào đã đóng) — không cộng vào."
+        )
+    return text
+
+
+def industry_share_note(ctx: Context) -> str:
+    """Ghi chú cho mọi bảng/biểu đồ cơ cấu ngành."""
+    listing = int((ctx.df.get("industry_basis") == "listing").sum()) if len(ctx.df) else 0
+    text = "Tin có nhiều ngành được chia đều cho các ngành (vd 2 ngành → mỗi ngành 0,5 tin)."
+    if listing:
+        text += (
+            f" {fmt_int(listing)} tin CareerLink chỉ có ngành theo trang danh mục đang duyệt (chưa đọc trang chi "
+            "tiết) → không tính vào cơ cấu ngành, vì tỷ trọng sẽ phản ánh danh mục nào đã duyệt chứ không phải thị "
+            "trường; vẫn lọc / xem lương theo ngành được."
+        )
+    return text
+
+
+def months_note(months: int) -> str:
+    return (
+        f"Chưa đủ dữ liệu để kết luận xu hướng: đã có {months}/6 tháng thu thập trọn (tháng bắt đầu thu thập giữa "
+        "chừng không tính; tin đăng trước khi bắt đầu thu thập không tính)."
+    )
 
 
 def window_comparable(ctx: Context, days: int) -> bool:
@@ -295,7 +333,7 @@ def csv_button(df: pd.DataFrame, name: str, key: str) -> None:
 
 def fmt_int(value) -> str:
     """12345 → "12.345" (dấu chấm phân tách hàng nghìn, chỉ định dạng con số)."""
-    return f"{int(value):,}".replace(",", ".")
+    return f"{round(float(value)):,}".replace(",", ".")
 
 
 def fmt_date(value: date | None) -> str:
@@ -338,16 +376,20 @@ def method_dialog() -> None:
 - **Tin duy nhất**: bỏ tin lỗi (reject: thiếu mã tin, tiêu đề hoặc công ty) và tin trùng
   (cùng công ty + tiêu đề + tỉnh, giữ tin thấy sớm nhất). Mọi số liệu tính trên tập này.
 - **Tin mới (dòng chảy)** đếm theo ngày đăng; thiếu ngày đăng thì dùng ngày hệ thống thấy tin lần đầu.
-  CareerLink: ngày trên thẻ tin là ngày **đăng/cập nhật** (tin đăng lại được làm mới ngày) — trang chi tiết có
-  `datePosted` thì ưu tiên. Δ so kỳ trước chỉ hiện khi kỳ trước nằm trọn sau ngày bắt đầu thu thập.
-  **Đang tuyển (tồn)** = trạng thái đang tuyển và chưa quá hạn tại ngày chốt.
+  CareerLink, CareerViet: ngày trên thẻ tin là ngày **đăng/cập nhật** (tin đăng lại được làm mới ngày) — trang chi
+  tiết có `datePosted` thì ưu tiên. Δ so kỳ trước chỉ hiện khi kỳ trước nằm trọn sau ngày bắt đầu thu thập.
+  **Đang tuyển (tồn)** = trạng thái đang tuyển và chưa quá hạn tại ngày chốt, chỉ với tin **xác định được**
+  trạng thái (có hạn nộp, đã đọc trang chi tiết, hoặc nguồn đã quét trọn một vòng); còn lại hiện là "chưa xác định".
+- **Cơ cấu ngành**: tin nhiều ngành (CareerViet 1–3 ngành/tin) chia đều cho mỗi ngành; tin CareerLink chỉ có ngành
+  theo trang danh mục đang duyệt không tính vào tỷ trọng (lệch theo danh mục đã duyệt).
 - **Lương đại diện**: khoảng → trung điểm; một mức → chính nó. “Tới X”, “từ X”, thoả thuận, không ghi
   → không đưa vào trung bình/trung vị. Nhóm dưới 5 tin có lương số hiện **n<5**.
 - **Xu hướng**: 3 tháng gần nhất so với 3 tháng liền trước; lệch quá 10% là tăng/giảm;
   3 tháng trước dưới 10 tin → “Chưa đủ dữ liệu”. Cần ≥ 6 tháng dữ liệu liên tục.
 - **Thiên lệch giai đoạn đầu**: trước ngày bắt đầu thu thập chỉ thấy tin chưa hết hạn → các tháng đầu bị thiếu.
-- **Tin tồn sẵn**: tin đã có khi bắt đầu thu thập mà chưa biết ngày đăng → vẫn tính vào phân bố ngành/địa phương/
-  lương, **không** tính là tin mới / theo tháng / xu hướng. Ngày đăng thật được bổ sung dần từ trang chi tiết.
+- **Tin tồn sẵn**: tin đã có khi bắt đầu thu thập mà chưa biết ngày đăng, hoặc đăng/làm mới trước ngày bắt đầu
+  thu thập nguồn → vẫn tính vào phân bố ngành/địa phương/lương, **không** tính là tin mới / theo tháng / xu hướng.
+  Xu hướng chỉ tính tháng thu thập trọn (tháng bắt đầu giữa chừng không tính).
 - **Khoảng lương rộng bất thường** (đầu trên > 5 lần đầu dưới, kiểu "lương cứng + hoa hồng lên tới") → không đưa
   vào trung bình/trung vị (ngưỡng `max_range_ratio`).
 - **Công ty**: gộp tên chỉ khác cách viết loại hình (CP = Cổ phần = JSC); khác loại hình (TNHH ≠ CP) không gộp.

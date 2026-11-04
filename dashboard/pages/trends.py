@@ -20,13 +20,8 @@ if not c.empty_state(ctx):
         c.snapshot_note("xu hướng theo thời gian")
     elif c.dimension_missing(ctx, "industry", "ngành"):
         pass
-    elif not months:
-        c.no_dates_note("xu hướng")
     elif months < 6:
-        st.info(
-            f"**Chưa đủ điều kiện kết luận xu hướng.** Cần ≥ 6 tháng dữ liệu liên tục cùng phạm vi thu thập; "
-            f"hiện có {months}/6 tháng."
-        )
+        st.info(c.months_note(months))
         st.progress(months / 6)
     else:
         month_end = ctx.as_of.replace(day=1)

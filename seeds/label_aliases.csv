@@ -1,0 +1,10 @@
+label_type,alias,code,note
+level,Trưởng phòng,MANAGER,Việc Làm 24h job_level_requirement 2
+level,Chuyên gia,SENIOR,Việc Làm 24h job_level_requirement 4
+level,Cộng tác viên,,Việc Làm 24h 6 — hình thức cộng tác, không phải cấp bậc → bỏ qua
+level,Quản lý cấp cao,DIRECTOR,CareerLink — quản lý cấp cao ≈ cấp giám đốc
+level,Kỹ thuật viên / Kỹ sư,STAFF,CareerLink
+level,Sinh viên / Thực tập sinh,INTERN,CareerLink
+level,Mới đi làm,JUNIOR,CareerLink
+level,Trưởng nhóm / Giám sát,LEAD,CareerLink
+level,Quản lý / Trưởng phòng,MANAGER,CareerLink

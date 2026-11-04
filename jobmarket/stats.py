@@ -84,9 +84,17 @@ def load_unique(
         df[col] = pd.to_datetime(df[col], errors="coerce")
     seen_day = pd.to_datetime(df["first_seen_at"], errors="coerce").dt.normalize()
     source_start = seen_day.groupby(df["source"]).transform("min")
+    df["collection_start"] = source_start
     backlog = df["posted_date"].isna() & (seen_day <= source_start + pd.Timedelta(days=int(backlog_grace_days)))
+    # Ngày đăng/làm mới TRƯỚC ngày bắt đầu thu thập nguồn: hệ thống chỉ thấy tin còn sống tới lúc đó (tin đã hết
+    # hạn trước đó không bao giờ thấy) → không phải dòng tin của tháng ấy. Tính vào tháng cũ sẽ làm tháng trước
+    # thiếu có hệ thống → MoM/xu hướng luôn "tăng" giả (đo 2026-11-04: +5.095% sau 2 ngày thu thập).
+    # Dung sai 1 ngày = độ trễ bình thường giữa lúc đăng và lần chạy kế tiếp thấy tin.
+    backlog |= df["event_date"].notna() & (df["event_date"] < source_start - pd.Timedelta(days=1))
     df["date_known"] = ~backlog
     df.loc[backlog, "event_date"] = pd.NaT
+    df["status_known"] = _status_known(conn, df)
+    df["industry_basis"] = _industry_basis(conn, df)
     df["salary_excluded"] = None
     if max_range_ratio:
         wide = (df["salary_type"] == "range") & (df["salary_to"] > df["salary_from"] * float(max_range_ratio))
@@ -101,7 +109,78 @@ def load_unique(
         # Thứ tự danh mục: phá hoà khi xếp hạng, sắp bảng theo thứ tự chuẩn; chưa phân loại xếp cuối
         df[f"{dim}_order"] = df[code_col].map({r[0]: r[2] for r in rows}).fillna(10_000)
     df["company_key"] = df["company_name"].fillna("").map(company_identity)
+    df["industry_codes"] = _industry_codes(conn, df)
     return apply_filters(df, filters) if filters else df
+
+
+def _industry_codes(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
+    """Mã ngành chuẩn KHÁC NHAU của mọi mục ngành của tin (bảng job_industry_labels, theo thứ tự nguồn); tin một
+    ngành có 1 phần tử; tin không có bảng mục ngành → tuple rỗng (dùng industry_code)."""
+    if df.empty:
+        return pd.Series(dtype=object)
+    rows = conn.execute(
+        """SELECT j.job_id, m.code, m.name, m.sort_order FROM job_industry_labels j
+           JOIN labels l ON l.id = j.label_id AND l.status = 'mapped'
+           JOIN master_industries m ON m.code = l.master_code
+           ORDER BY j.job_id, j.position"""
+    ).fetchall()
+    codes: dict[int, list[tuple]] = {}
+    for job_id, code, name, order in rows:
+        seen = codes.setdefault(job_id, [])
+        if code not in [c[0] for c in seen]:
+            seen.append((code, name, order))
+    return df["id"].map(lambda i: tuple(codes.get(i, ())))
+
+
+def industry_alloc(df: pd.DataFrame) -> pd.DataFrame:
+    """Mỗi tin → (một hoặc nhiều) dòng ngành, trọng số 1/k khi tin có k ngành chuẩn khác nhau (đếm chia đều)."""
+    if "industry_codes" not in df or df.empty:
+        return df.assign(weight=1.0)
+    multi = df["industry_codes"].map(len) > 1
+    single = df[~multi].assign(weight=1.0)
+    if not multi.any():
+        return single
+    spread = df[multi].assign(_alloc=df.loc[multi, "industry_codes"].map(list)).explode("_alloc")
+    spread["weight"] = 1.0 / df.loc[multi, "industry_codes"].map(len).reindex(spread.index)
+    spread["industry_code"] = spread["_alloc"].map(lambda t: t[0])
+    spread["industry_name"] = spread["_alloc"].map(lambda t: t[1])
+    spread["industry_order"] = spread["_alloc"].map(lambda t: t[2])
+    return pd.concat([single, spread.drop(columns="_alloc")], ignore_index=True)
+
+
+# Nguồn mà ngành của tin lấy từ TRANG DANH MỤC đang duyệt (không phải từ chính tin): tỷ trọng ngành phản ánh danh
+# mục nào đã được duyệt, không phản ánh thị trường (CareerLink 2026-11-04: 4/15 ngành có tin, 49% chưa phân loại).
+# Tin đã đọc trang chi tiết (ngành từ JSON-LD của tin) thì ngành gắn theo tin.
+LISTING_INDUSTRY_SOURCES = {"careerlink", "jobsgo"}
+
+
+def _industry_basis(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
+    """'item' = ngành ghi trên chính tin; 'listing' = suy từ trang danh mục đang duyệt (không tính tỷ trọng)."""
+    if df.empty:
+        return pd.Series(dtype=object)
+    detail = dict(conn.execute("SELECT id, detail_fetched_at IS NOT NULL FROM job_posts").fetchall())
+    from_listing = df["source"].isin(LISTING_INDUSTRY_SOURCES) & ~df["id"].map(detail).fillna(0).astype(bool)
+    return from_listing.map({True: "listing", False: "item"})
+
+
+def _status_known(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
+    """Trạng thái còn tuyển/hết hạn xác định được: có trạng thái từ trang chi tiết, có hạn nộp, hoặc nguồn đã quét
+    trọn ít nhất một vòng (tin không thấy lại đã bị đánh hết hạn). Trước vòng quét trọn đầu tiên, tin 'unknown'
+    không hạn nộp có thể đã đóng từ lâu → "chưa xác định", không cộng vào "đang tuyển"."""
+    if df.empty:
+        return pd.Series(dtype=bool)
+    swept = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT source FROM crawl_listings WHERE last_full_sweep_started_at IS NOT NULL"
+        ).fetchall()
+    }
+    return (df["status"] != "unknown") | df["deadline"].notna() | df["source"].isin(swept)
+
+
+def industry_comparable(df: pd.DataFrame) -> pd.DataFrame:
+    """Tập dùng cho cơ cấu/tỷ trọng/xu hướng NGÀNH: chỉ tin có ngành gắn theo tin."""
+    return df[df["industry_basis"] != "listing"] if "industry_basis" in df else df
 
 
 def as_of_date(conn: sqlite3.Connection) -> date | None:
@@ -162,13 +241,26 @@ def is_active(df: pd.DataFrame, as_of: date, seen_days: int = ACTIVE_SEEN_DAYS) 
     """M03: status='active' và chưa quá hạn tại ngày chốt.
 
     Nguồn chỉ có trang danh sách không cho biết trạng thái (status='unknown'): coi là đang tuyển nếu hệ thống
-    còn thấy tin trong `seen_days` ngày tính tới ngày chốt.
+    còn thấy tin trong `seen_days` ngày tính tới ngày chốt. `seen_days` ≤ 0 = bỏ điều kiện này, tin 'unknown' chưa
+    bị đánh dấu hết hạn là còn tuyển (dùng khi việc hết hạn do vòng quét trọn quyết định — pipeline.mark_expired).
     """
     not_expired = df["deadline"].isna() | (df["deadline"] >= pd.Timestamp(as_of))
-    recently_seen = pd.to_datetime(df["last_seen_at"], errors="coerce") >= pd.Timestamp(as_of) - timedelta(
-        days=seen_days
-    )
-    return ((df["status"] == "active") & not_expired) | ((df["status"] == "unknown") & recently_seen & not_expired)
+    if seen_days <= 0:
+        recently_seen = pd.Series(True, index=df.index)
+    else:
+        recently_seen = pd.to_datetime(df["last_seen_at"], errors="coerce") >= pd.Timestamp(as_of) - timedelta(
+            days=seen_days
+        )
+    known = df["status_known"] if "status_known" in df else pd.Series(True, index=df.index)
+    active = ((df["status"] == "active") & not_expired) | ((df["status"] == "unknown") & recently_seen & not_expired)
+    return active & known
+
+
+def status_undetermined(df: pd.DataFrame) -> pd.Series:
+    """Tin chưa xác định được còn tuyển hay không (xem `_status_known`)."""
+    if "status_known" not in df:
+        return pd.Series(False, index=df.index)
+    return ~df["status_known"].astype(bool)
 
 
 def _delta(cur: float, prev: float) -> float | None:
@@ -183,6 +275,7 @@ def overview(df: pd.DataFrame, as_of: date, window_days: int, seen_days: int = A
     return {
         "unique_jobs": len(df),
         "active": int(is_active(df, as_of, seen_days).sum()),
+        "status_undetermined": int(status_undetermined(df).sum()),
         "new_window": new,
         "prev_window": before,
         "new_delta": _delta(new, before),
@@ -196,17 +289,28 @@ def overview(df: pd.DataFrame, as_of: date, window_days: int, seen_days: int = A
 def demand_by(
     df: pd.DataFrame, dim: str, as_of: date, window_days: int, seen_days: int = ACTIVE_SEEN_DAYS
 ) -> pd.DataFrame:
-    """M01, M02, M05 theo 1 chiều. Nhóm chưa phân loại vẫn tính vào tổng, không xếp hạng."""
+    """M01, M02, M05 theo 1 chiều. Nhóm chưa phân loại vẫn tính vào tổng, không xếp hạng.
+
+    Chiều ngành: chỉ tin có ngành gắn theo tin (`industry_comparable`) — ngành suy từ danh mục đang duyệt làm lệch
+    tỷ trọng."""
+    if dim == "industry":
+        df = industry_comparable(df)
     name = f"{dim}_name"
     cur, prev = _windows(as_of, window_days)
     work = df.assign(
         active=is_active(df, as_of, seen_days), new=_in(df["event_date"], cur), prev=_in(df["event_date"], prev)
     )
+    # Ngành: tin nhiều ngành chia đều 1/k cho mỗi ngành (tổng vẫn = số tin)
+    work = industry_alloc(work) if dim == "industry" else work.assign(weight=1.0)
+    for col in ("active", "new", "prev"):
+        work[col] = work[col].astype(float) * work["weight"]
     out = (
         work.groupby([name, f"{dim}_order"])
-        .agg(total=("id", "size"), active=("active", "sum"), new=("new", "sum"), prev=("prev", "sum"))
+        .agg(total=("weight", "sum"), active=("active", "sum"), new=("new", "sum"), prev=("prev", "sum"))
         .reset_index()
     )
+    for col in ("total", "active", "new", "prev"):
+        out[col] = _tidy_counts(out[col])
     out["share"] = out["total"] / out["total"].sum() if len(df) else 0
     out["delta"] = [_delta(n, p) for n, p in zip(out["new"], out["prev"], strict=True)]
     unclassified = out[name].isin(set(UNCLASSIFIED.values()) | {UNCLASSIFIED_DEFAULT})
@@ -218,21 +322,46 @@ def demand_by(
     return result.rename(columns={name: dim})
 
 
+def _tidy_counts(values: pd.Series) -> pd.Series:
+    """Số đếm có trọng số: nguyên hết → int; có phần lẻ (tin nhiều ngành) → làm tròn 1 chữ số."""
+    rounded = values.round(1)
+    return rounded.astype(int) if (rounded % 1 == 0).all() else rounded
+
+
+def _starts_month(start: pd.Timestamp) -> bool:
+    """Thu thập bắt đầu ngày `start` có phủ trọn tháng đó không (dung sai 1 ngày như `load_unique`)."""
+    return (start - pd.Timedelta(days=1)).day == 1 or start.day == 1
+
+
 def monthly(df: pd.DataFrame, end_month: date, months: int = 6) -> pd.DataFrame:
-    """M04: tin mới theo tháng (theo event_date), tách nguồn, kèm MoM."""
-    periods = pd.period_range(end=pd.Period(end_month, "M"), periods=months, freq="M")
+    """M04: tin mới theo tháng (theo event_date), tách nguồn, kèm MoM.
+
+    Chỉ các tháng từ khi bắt đầu thu thập (tháng trước đó không quan sát được, không phải "0 tin"). Tháng bắt đầu
+    thu thập giữa chừng chỉ có một phần → MoM của nó và của tháng kế tiếp để trống."""
+    end = pd.Period(end_month, "M")
+    periods = pd.period_range(end=end, periods=months, freq="M")
+    first_full = None
+    if "collection_start" in df and df["collection_start"].notna().any():
+        start = pd.Timestamp(df["collection_start"].min())
+        start_month = start.to_period("M")
+        periods = periods[periods >= start_month] if start_month <= end else periods[:0]
+        first_full = start_month if _starts_month(start) else start_month + 1
     month = df["event_date"].dt.to_period("M")
     table = pd.crosstab(month, df["source"]).reindex(periods, fill_value=0).astype(int)
     table.insert(0, "total", table.sum(axis=1).astype(int))
     table["mom"] = table["total"].pct_change().replace([float("inf")], pd.NA)
+    if first_full is not None:
+        table.loc[table.index <= first_full, "mom"] = pd.NA
     table.index = table.index.astype(str)
     return table.rename_axis("month").reset_index()
 
 
 def heatmap(df: pd.DataFrame, rows: str = "industry", cols: str = "province") -> pd.DataFrame:
     """M06: số tin theo cặp (ngành, tỉnh)."""
-    table = pd.crosstab(df[f"{rows}_name"], df[f"{cols}_name"])
-    table["Tổng"] = table.sum(axis=1)
+    df = industry_alloc(industry_comparable(df)) if "industry" in (rows, cols) else df.assign(weight=1.0)
+    table = pd.crosstab(df[f"{rows}_name"], df[f"{cols}_name"], values=df["weight"], aggfunc="sum").fillna(0)
+    table = table.apply(_tidy_counts)
+    table["Tổng"] = _tidy_counts(table.sum(axis=1))
     return table.sort_values("Tổng", ascending=False)
 
 
@@ -274,8 +403,14 @@ def trend(df: pd.DataFrame, end_month: date, min_vol: int, threshold: float, dim
     """T01–T02: Σ 3 tháng gần nhất vs Σ 3 tháng liền trước; nhóm chưa phân loại không xét."""
     periods = pd.period_range(end=pd.Period(end_month, "M"), periods=6, freq="M")
     name = f"{dim}_name"
+    df = industry_alloc(industry_comparable(df)) if dim == "industry" else df.assign(weight=1.0)
     data = df[~df[name].isin(set(UNCLASSIFIED.values()) | {UNCLASSIFIED_DEFAULT})]
-    table = pd.crosstab(data[name], data["event_date"].dt.to_period("M")).reindex(columns=periods, fill_value=0)
+    table = (
+        pd.crosstab(data[name], data["event_date"].dt.to_period("M"), values=data["weight"], aggfunc="sum")
+        .reindex(columns=periods, fill_value=0)
+        .fillna(0)
+    )
+    table = table.apply(_tidy_counts)
     table.columns = table.columns.astype(str)
     recent, before = table.iloc[:, 3:].sum(axis=1), table.iloc[:, :3].sum(axis=1)
     table["recent_3m"], table["prev_3m"] = recent, before
@@ -296,10 +431,16 @@ def trend_label(recent: float, prev: float, min_vol: int, threshold: float) -> s
 
 
 def months_of_data(df: pd.DataFrame) -> int:
-    """Số tháng có dữ liệu liên tục tính tới tháng gần nhất (điều kiện mở màn Xu hướng: ≥ 6)."""
+    """Số tháng TRỌN có dữ liệu liên tục tính tới tháng gần nhất (điều kiện mở màn Xu hướng: ≥ 6).
+
+    Tháng bắt đầu thu thập giữa chừng không tính (chỉ có một phần tháng)."""
     if df.empty:
         return 0
     present = set(df["event_date"].dt.to_period("M").dropna())
+    if "collection_start" in df and df["collection_start"].notna().any():
+        start = pd.Timestamp(df["collection_start"].min())
+        if not _starts_month(start):
+            present.discard(start.to_period("M"))
     if not present:  # mọi tin chưa rõ ngày đăng (tin tồn sẵn, bộ ảnh chụp)
         return 0
     month, count = max(present), 0

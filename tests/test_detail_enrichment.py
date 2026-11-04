@@ -159,3 +159,45 @@ def test_single_page_without_jsonld_is_marked_once_source_proves_healthy(loaded,
     counts = enrich_details(loaded, tmp_cfg, client(tmp_cfg, handler), careerlink, limit=2)
     assert (counts["no_jsonld"], counts["enriched"]) == (1, 1)
     assert _fetched(loaded) == 2
+
+
+def test_detail_industry_list_is_split_primary_first():
+    multi = '"industry":"Khác, Biên phiên dịch / Thông dịch viên, Điện / Điện tử"'
+    html = DETAIL.replace('"industry":"Khách sạn"', multi)
+    d = careerlink.parse_detail(html)
+    assert d["industries"] == ["Khác", "Biên phiên dịch / Thông dịch viên", "Điện / Điện tử"]
+
+
+def test_choose_industry_primary_mapped_wins_and_mapped_listing_is_not_downgraded(tmp_cfg):  # noqa: F811
+    from jobmarket.pipeline import choose_industry, label_id
+
+    conn = init_db(tmp_cfg.path("db_file"))
+    with conn:
+        listing = label_id(conn, "industry", "careerlink", "Sản xuất")  # IND02 qua seeds/industry_aliases.csv
+
+        def code(label):
+            return conn.execute("SELECT master_code FROM labels WHERE id = ?", (label,)).fetchone()[0]
+
+        # "Khác" bị bỏ qua → mục chính là Biên phiên dịch (đã ánh xạ) → thay ngành trang danh mục
+        assert code(choose_industry(conn, "careerlink", ["Khác", "Biên phiên dịch / Thông dịch viên"], listing)) == (
+            "IND15"
+        )
+        # mục chính chưa ánh xạ → giữ ngành chuẩn đang có, không hạ xuống nhãn chưa ánh xạ
+        assert choose_industry(conn, "careerlink", ["Ngành lạ chưa có", "Điện / Điện tử"], listing) == listing
+        # tin chưa có ngành → nhận mục chính (vào hàng chờ duyệt)
+        new = choose_industry(conn, "careerlink", ["Ngành lạ chưa có"], None)
+        assert conn.execute("SELECT status FROM labels WHERE id = ?", (new,)).fetchone()[0] == "unmapped"
+
+
+def test_categories_linked_from_detail_page_are_crawled_next_run(loaded, tmp_cfg):  # noqa: F811
+    """Trang chủ chỉ liên kết vài danh mục; danh mục thấy trên trang chi tiết được nhớ (crawl_listings) và lần chạy
+    sau duyệt trang danh mục đó (gắn ngành cho ~50 tin/request)."""
+    detail = DETAIL.replace("<body>", '<body><a href="/viec-lam/dien-dien-tu/20">Điện / Điện tử</a>', 1)
+    handler, _ = _sequence_site([detail])
+    enrich_details(loaded, tmp_cfg, client(tmp_cfg, handler), careerlink, limit=1)
+    stored = loaded.execute("SELECT url, label, last_crawled_at FROM crawl_listings WHERE url LIKE '%dien-dien-tu%'")
+    assert [tuple(r) for r in stored] == [("https://www.careerlink.vn/viec-lam/dien-dien-tu/20", "Điện / Điện tử", "")]
+
+    handler, calls = site()
+    run_paged(loaded, tmp_cfg, client(tmp_cfg, handler), careerlink, max_pages=1)
+    assert "https://www.careerlink.vn/viec-lam/dien-dien-tu/20" in calls

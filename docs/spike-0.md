@@ -148,3 +148,63 @@ Hệ quả cho PLAN: mỗi nguồn là 1 adapter (`html_listing`, `api`, `datase
   (3 trang liền → coi là bị hạn chế, dừng). Lịch chạy tự thử lại ở lần sau.
 - **Xoay vòng danh sách** (`crawl_listings`): mỗi lần chạy ưu tiên danh mục chưa duyệt/duyệt lâu nhất, trang gắn
   được ngành cho tin cũ cũng tính là "có ích" → các lần chạy sau phủ dần mọi danh mục thay vì lặp lại 4 danh mục đầu.
+
+## Lượt 6 — rà soát độ đúng của dữ liệu crawl (2026-11-04)
+
+- **Đối chiếu DB ↔ thẻ tin đã lưu** (`scripts/audit_careerlink.py`, không request mạng): 3.457 tin, 12 trường
+  (mã, URL, tiêu đề, công ty, lương gốc/loại/khoảng, địa điểm/số địa điểm, cấp bậc, ngày) → **0 lệch**. Thẻ tin chỉ có
+  6 trường dữ liệu (tiêu đề, công ty, địa điểm, ngày cập nhật, lương, cấp bậc) và đều đã đọc.
+- **Ngày trên thẻ tin là ngày CẬP NHẬT**, không phải ngày đăng gốc: 9/9 tin có trang chi tiết có `datePosted` sớm hơn
+  (vd 12/10 so với 04/11). Trang chi tiết có thì dùng `datePosted`.
+- **`industry` trang chi tiết là DANH SÁCH mục** cách nhau dấu phẩy, mục đầu = chức năng chính → tách, lấy mục chính
+  (bỏ "Khác"), không thay ngành chuẩn đang có bằng nhãn chưa ánh xạ. Trước đó cả chuỗi thành 1 nhãn chưa ánh xạ và
+  ghi đè ngành đúng từ trang danh mục (13/15 tin đã sửa lại bằng `backfill`, từ JSON-LD đã lưu).
+- **Lương thực tập/part-time 1–3 triệu là thật** (CareerLink 8, VietJobs 554 tin bị loại oan) → ngưỡng tối thiểu 3 triệu
+  → 1 triệu (chỉ bắt lỗi đơn vị như "0.1 triệu"); `renormalize` tính lại từ chuỗi gốc. Trung vị thực tập CareerLink
+  4,5 → 3,8 triệu.
+- **Độ phủ**: danh sách chung 688 trang (~34.000 tin) nhưng mỗi lần chạy chỉ đọc ≤10 trang đầu → **quét sâu**
+  (`resume_page`, 8 trang/lần, lùi 2 trang chống sót). Hết hạn đổi sang **theo vòng quét trọn** (một vòng mất nhiều
+  ngày; luật "14 ngày không thấy" sẽ đánh dấu nhầm tin còn tuyển); tin thấy lại trên danh sách → còn tuyển.
+- Lần chạy thật 04/11 (code quét sâu): 34 trang danh sách + 15 trang chi tiết, không bị hộp xác minh; +591 tin mới,
+  kinh nghiệm/hạn nộp/ngành chi tiết đọc đúng.
+
+## Lượt 7 — quét toàn site CareerLink, TopCV (2026-11-04)
+
+- **TopCV**: `robots.txt` đọc được (không cấm trang tin), nhưng `sitemap.xml` cũng bị Cloudflare chặn ("Attention
+  Required", 403) với User-Agent tự khai → không có kênh tự động nào mở. **Không vượt** (không giả trình duyệt, không
+  dùng trình duyệt tự động giải challenge, không điều khiển trình duyệt của người dùng). Cách lấy đủ trường: người dùng
+  tự lưu trang khi duyệt → `import-html` nay đọc cả **trang chi tiết** (JSON-LD `JobPosting`, `sources/jsonld.py` dùng
+  chung với CareerLink). Mẫu test `tests/fixtures/topcv/detail_synthetic.html` là mẫu tự dựng theo schema.org — cần đối
+  chiếu khi có trang TopCV thật.
+- **PII**: SĐT ở cuối câu ("… 0912 345 678.") trước đây không bị xoá (biên phải cấm mọi dấu chấm) → sửa biên; quét lại
+  DB + 3.472 file data/raw: 0 chỗ còn PII.
+- **CareerLink toàn site**: 25 trang sâu/lần (≤ 50 request/lần như cũ) → vòng quét ~5 ngày với lịch 6 lần/ngày. Danh mục
+  thấy trên trang chi tiết được nhớ (`crawl_listings`) và duyệt ở lần sau → gắn ngành cho tin ngoài 8 danh mục trang chủ.
+
+## Lượt 8 — thêm nguồn + rà soát đa agent (2026-11-04)
+
+- **Việc Làm 24h** (`sources/vieclam24h.py`): robots chỉ cấm `/admin`, `/taikhoan`, `/*?q`; UA tự khai nhận 200. Dữ
+  liệu có cấu trúc trong `__NEXT_DATA__` (30 tin/trang + bảng tra tên ngành/nghề/tỉnh/kinh nghiệm/cấp bậc) → đủ 100%
+  trường. **Trang 2 (`?page=2`) trả 403** dù robots không cấm → không thử vượt; mỗi lần đọc trang 1 của trang tìm nhanh
+  + 53 trang nghề. Ngành = nghề chính `occupation_ids_main[0]` (chức năng), không phải lĩnh vực công ty.
+- **CareerViet** (`sources/careerviet.py`): robots cấm `/vi/jobs/*` (trang chi tiết) → chỉ thẻ tin danh sách; 50
+  tin/trang, `pageCount` (370 trang ≈ 18.500 tin) trong payload Next.js. Thẻ có 1–3 mục ngành (`ul.welfare`), hạn nộp,
+  ngày CẬP NHẬT (không có ngày đăng gốc), không có kinh nghiệm/cấp bậc. Lần đầu: 35 trang, 1.747 tin, không bị chặn.
+- **Bỏ qua**: 123job (tổng hợp lại tin nơi khác, tên người ở ô công ty, ngày tương đối, không ngành/hạn nộp), TopDev
+  (từ chối kết nối SSL). Chưa làm: ITviec (chỉ IT), timviec365 (chưa thấy trang danh sách).
+- **Rà soát 5 agent** (pm, tester, risk-reviewer, dev, docs-keeper) → đã sửa:
+  - PII: email nhân viên tuyển dụng lồng trong `employer_info.assigned_staff_username` (Việc Làm 24h) lọt vào 30 file
+    bản gốc + fixture → bản gốc đổi sang danh sách trắng; lớp chặn chung `store/raw.sanitize` (bỏ key liên hệ ở mọi độ
+    sâu + scrub mọi chuỗi) cho mọi nguồn; `scripts/scrub_raw.py` làm sạch file đã lưu (kiểm lại 2026-11-04: 0/7.502 file còn email).
+  - Vòng quét: trang trống khi không biết trang cuối bị coi là "quét trọn" → đánh hết hạn nhầm hàng loạt (mô phỏng
+    được). Nay chỉ chốt vòng khi đã đọc qua trang cuối của thanh phân trang/`pageCount`.
+  - robots.txt: `urllib.robotparser` không hiểu `*`/`$` → `fetch/robots.py` theo RFC 9309; chuyển hướng tự theo và
+    kiểm robots từng bước; 429 dừng ngay.
+  - Thống kê: "Đang tuyển" 100% (chưa vòng quét trọn nào) → chỉ đếm tin xác định được trạng thái; ngày đăng/làm mới
+    trước ngày bắt đầu thu thập không tính vào tháng/MoM/xu hướng (bảng tháng từng hiện +5.095%); tháng bắt đầu giữa
+    chừng không tính là tháng trọn; cơ cấu ngành chỉ tin có ngành theo tin (CareerLink suy từ 4 danh mục đã duyệt bị
+    loại khỏi tỷ trọng) và đếm chia đều tin nhiều ngành (bảng `job_industry_labels`, migration 007).
+  - Hạn nộp gia hạn được cập nhật; tin `active` không còn thấy cũng hết hạn; mã tin dùng làm tên file được kiểm (chặn
+    `../`); `start` không sập khi bước tự nạp lỗi; `run` bỏ qua nguồn đã chạy < 3,5 giờ (`--force` để ép).
+- **Còn mở**: nghề (occupation) 0% mọi nguồn; kinh nghiệm CareerLink/CareerViet gần 0% (chỉ có ở trang chi tiết —
+  CareerLink giới hạn, CareerViet robots cấm); CareerLink vẫn hay bị challenge ngay trang 2 dù cách 4 giờ.

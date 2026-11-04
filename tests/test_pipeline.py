@@ -17,9 +17,10 @@ CHALLENGE = "<html><title>Just a moment...</title>Enable JavaScript and cookies 
 def tmp_cfg(cfg, tmp_path):
     raw = {**cfg.raw, "paths": {"data_dir": "data", "db_file": "data/test.db", "raw_dir": "data/raw"}}
     raw["crawl"] = {**cfg.crawl, "min_delay_seconds": 0}
-    # test tầng danh sách không đọc trang chi tiết (test tầng 2 tự bật ngân sách riêng)
+    # test tầng danh sách không đọc trang chi tiết, không quét sâu (test riêng tự bật)
     raw["sources"] = {
-        name: {**src, "detail_max_per_run": 0, "min_delay_seconds": 0} for name, src in cfg.raw["sources"].items()
+        name: {**src, "detail_max_per_run": 0, "deep_pages_per_run": 0, "min_delay_seconds": 0}
+        for name, src in cfg.raw["sources"].items()
     }
     return dataclasses.replace(cfg, raw=raw, root=tmp_path)
 
@@ -82,7 +83,7 @@ def test_label_not_matching_standard_name_stays_unmapped(tmp_cfg):
 
     conn = init_db(tmp_cfg.path("db_file"))
     exact = label_id(conn, "industry", "topcv", "Công nghệ Thông tin")
-    fuzzy = label_id(conn, "industry", "topcv", "Bán lẻ/Dịch vụ đời sống")
+    fuzzy = label_id(conn, "industry", "topcv", "Tư vấn chuyên môn")  # không có trong bảng ánh xạ → chờ duyệt
     rows = {r["id"]: r for r in conn.execute("SELECT id, status, master_code FROM labels")}
     assert (rows[exact]["status"], rows[exact]["master_code"]) == ("mapped", "IND01")
     assert (rows[fuzzy]["status"], rows[fuzzy]["master_code"]) == ("unmapped", None)

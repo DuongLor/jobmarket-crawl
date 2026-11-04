@@ -167,3 +167,11 @@ CRAWLED = {"source_job_id", "title", "company_name"}  # nguồn crawl có đủ 
 )
 def test_quality(fields, flags, provides, expected):
     assert assess(fields, flags, provides) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["Liên hệ 0912 345 678.", "Gọi 0912.345.678, gặp chị Lan", "(0912345678)", "SĐT:0912345678."]
+)
+def test_pii_phone_at_sentence_end_or_punctuation(text):
+    scrubbed, removed = scrub(text)
+    assert removed == ["phone"] and "0912" not in scrubbed

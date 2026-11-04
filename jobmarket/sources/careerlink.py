@@ -1,19 +1,20 @@
 """CareerLink — trang danh sách `/vieclam/list?page=N` (docs/spike-0.md, khảo sát 2026-11-03).
 
 robots.txt cho phép; bot tự khai danh tính không bị chặn ở tốc độ thấp. ~50 tin/trang, ~33.900 tin.
-Đọc nhanh (~25 trang < 1 phút) thì nguồn trả trang không có tin (HTTP 200) → config giãn 10 s/request, ≤ 60/đêm.
+Đọc nhanh (~25 trang < 1 phút) thì nguồn trả trang không có tin (HTTP 200) →
+config giãn 10 s/request, ≤ 40 trang danh sách + 10 trang chi tiết mỗi lần, cách ≥ 4 giờ.
 Thẻ tin có: mã tin, tiêu đề, công ty, địa điểm, lương, CẤP BẬC, NGÀY ĐĂNG/CẬP NHẬT (`<time datetime>`, UTC;
 khớp `datePosted` của trang chi tiết). Không có ngành (trừ khi đọc từ trang ngành), kinh nghiệm, hạn nộp → tầng 2.
 """
 
-import json
 import re
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from selectolax.lexbor import LexborHTMLParser
 
 from jobmarket.normalize.text import clean
 from jobmarket.pii import scrub
+from jobmarket.sources import jsonld
 from jobmarket.sources.base import ListingPage, RawJob
 from jobmarket.timeutil import local_date
 
@@ -52,6 +53,17 @@ def listings(start_url: str, start_html: str) -> list[ListingPage]:
     return [ListingPage(url=start_url, industry_label=None), *discover(start_html)]
 
 
+def last_page(html: str, listing_url: str) -> int | None:
+    """Số trang cuối trên thanh phân trang của chính danh sách này (vd `/vieclam/list?page=690`)."""
+    path = urlsplit(listing_url).path
+    pages = []
+    for a in LexborHTMLParser(html).css("a[href]"):
+        parts = urlsplit(urljoin(BASE, a.attributes.get("href") or ""))
+        if parts.path == path and (m := re.search(r"(?:^|&)page=(\d+)", parts.query)):
+            pages.append(int(m.group(1)))
+    return max(pages) if pages else None
+
+
 def page_url(listing_url: str, page: int) -> str:
     base = re.sub(r"[?&]page=\d+", "", listing_url)
     return base if page == 1 else f"{base}{'&' if '?' in base else '?'}page={page}"
@@ -85,36 +97,10 @@ def card_date(node) -> str | None:
 
 
 def parse_detail(html: str) -> dict | None:
-    """Trang chi tiết `/tim-viec-lam/<slug>/<id>` → trường từ JSON-LD `JobPosting` (dữ liệu có cấu trúc chuẩn
-    schema.org mà trang công bố cho máy tìm kiếm). None nếu trang không có JobPosting."""
-    tree = LexborHTMLParser(html)
-    for script in tree.css('script[type="application/ld+json"]'):
-        try:
-            data = json.loads(script.text())
-        except ValueError:
-            continue
-        items = data if isinstance(data, list) else data.get("@graph", [data])
-        posting = next((i for i in items if isinstance(i, dict) and i.get("@type") == "JobPosting"), None)
-        if not posting:
-            continue
-        description = posting.get("description") or ""
-        text = LexborHTMLParser(f"<div>{description}</div>").body.text(separator="\n") if description else ""
-        text, removed = scrub(re.sub(r"\n{3,}", "\n\n", text).strip())
-        experience = clean(str(posting.get("experienceRequirements") or "")) or None
-        if isinstance(posting.get("experienceRequirements"), dict):
-            months = posting["experienceRequirements"].get("monthsOfExperience")
-            experience = f"{months} tháng" if months is not None else None
-        return {
-            "industry": clean(str(posting.get("industry") or "")) or None,
-            "experience": experience,
-            "posted_date": str(posting.get("datePosted") or "")[:10] or None,
-            "deadline": str(posting.get("validThrough") or "")[:10] or None,
-            "employment_type": clean(str(posting.get("employmentType") or "")) or None,
-            "description_text": text or None,
-            "pii_removed": removed,
-            "jsonld": {k: v for k, v in posting.items() if k != "description"},
-        }
-    return None
+    """Trang chi tiết `/tim-viec-lam/<slug>/<id>` → trường từ JSON-LD `JobPosting` (sources/jsonld.py).
+    `industry` của CareerLink là danh sách mục cách nhau dấu phẩy, mục đầu = chức năng chính. None nếu không có."""
+    posting = jsonld.find_job_posting(html)
+    return jsonld.parse_job_posting(posting) if posting else None
 
 
 def parse_listing(html: str, industry_label: str | None) -> list[RawJob]:

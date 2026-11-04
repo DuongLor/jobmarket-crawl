@@ -29,19 +29,20 @@ if not c.empty_state(ctx):
                    help="Đã bỏ tin lỗi và tin trùng. Mọi chỉ số tính trên tập này.")  # fmt: skip
     if ctx.historical:
         cols[1].metric("Đang tuyển", "—", help="Bộ lịch sử: mọi tin đã hết hạn.")
-        cols[2].metric(f"Tin mới {s['window_days']} ngày", "—", help="Bộ lịch sử là ảnh chụp, không có ngày đăng.")
+        cols[2].metric(
+            f"Tin đăng/làm mới {s['window_days']} ngày", "—", help="Bộ lịch sử là ảnh chụp, không có ngày đăng."
+        )
     else:
-        cols[1].metric("Đang tuyển", c.fmt_int(o["active"]),
-                       help="Trạng thái đang tuyển và chưa quá hạn tại ngày chốt.")  # fmt: skip
+        cols[1].metric("Đang tuyển", c.fmt_int(o["active"]), help=c.active_help(o))
         if c.has_dates(ctx):
             comparable = c.window_comparable(ctx, int(s["window_days"]))
-            cols[2].metric(f"Tin mới {s['window_days']} ngày", c.fmt_int(o["new_window"]),
+            cols[2].metric(f"Tin đăng/làm mới {s['window_days']} ngày", c.fmt_int(o["new_window"]),
                            delta=c.fmt_delta(o["new_delta"]) if comparable and o["new_delta"] is not None else None,
                            help=(f"So với {s['window_days']} ngày liền trước ({c.fmt_int(o['prev_window'])} tin)."
                                  if comparable else "Chưa so với kỳ trước: kỳ trước nằm trước ngày bắt đầu thu thập "
                                  "nên thiếu tin (chỉ còn thấy tin chưa hết hạn)."))  # fmt: skip
         else:
-            cols[2].metric(f"Tin mới {s['window_days']} ngày", "—",
+            cols[2].metric(f"Tin đăng/làm mới {s['window_days']} ngày", "—",
                            help="Chưa có tin nào rõ ngày đăng (đều là tin có sẵn khi bắt đầu thu thập).")  # fmt: skip
     no_company = int(ctx.df["company_name"].isna().sum())
     company_help = "Số công ty khác nhau có tin trong tập đang xem."
@@ -67,16 +68,17 @@ if not c.empty_state(ctx):
             fig.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig, width="stretch")
             unclassified = int(ind.loc[ind["industry"] == stats.UNCLASSIFIED["industry"], "total"].sum())
-            st.caption(f"Top 8 ngành · {c.fmt_int(unclassified)} tin chưa phân loại ngành (không vẽ).")
+            st.caption(f"Top 8 ngành · {c.fmt_int(unclassified)} tin chưa phân loại ngành (không vẽ). "
+                       + c.industry_share_note(ctx))  # fmt: skip
     with right:
         if ctx.historical:
             st.subheader("Tin theo nguồn")
-            c.snapshot_note("tin mới theo tháng")
+            c.snapshot_note("tin đăng/làm mới theo tháng")
         elif not c.has_dates(ctx):
-            st.subheader("Tin mới theo tháng")
-            c.no_dates_note("tin mới theo tháng")
+            st.subheader("Tin đăng/làm mới theo tháng")
+            c.no_dates_note("tin đăng/làm mới theo tháng")
         else:
-            st.subheader("Tin mới theo tháng")
+            st.subheader("Tin đăng/làm mới theo tháng")
             month_end = ctx.as_of.replace(day=1)
             m = stats.monthly(ctx.df, month_end)
             by_source = m.melt(id_vars="month", value_vars=[x for x in m.columns if x not in ("month", "total", "mom")],
@@ -114,10 +116,8 @@ if not c.empty_state(ctx):
             c.snapshot_note("xu hướng theo thời gian")
         else:
             months = stats.months_of_data(ctx.df_all)
-            if not months:
-                st.info("Chưa có tin nào rõ ngày đăng — xu hướng cần ≥ 6 tháng dữ liệu liên tục.")
-            elif months < 6:
-                st.info(f"Chưa đủ dữ liệu để kết luận xu hướng: đã có {months}/6 tháng liên tục.")
+            if months < 6:
+                st.info(c.months_note(months))
             else:
                 t = stats.trend(ctx.df, ctx.as_of.replace(day=1), int(s["min_vol_trend"]), float(s["trend_threshold"]))
                 st.dataframe(t[["industry", "trend"]].rename(columns={"industry": "Ngành", "trend": "Xu hướng"}),

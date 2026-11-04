@@ -12,7 +12,8 @@ timeout_seconds = 30
 max_retries = 2
 # Dừng một nguồn khi tỷ lệ request lỗi trong lần chạy vượt ngưỡng này
 stop_error_rate = 0.2
-# Tin không còn thấy trên nguồn quá N ngày → trạng thái 'expired' (chỉ đánh dấu sau lần chạy có dữ liệu)
+# Tin không còn thấy trên nguồn quá N ngày → trạng thái 'expired' (chỉ đánh dấu sau lần chạy có dữ liệu). Chỉ áp
+# dụng cho nguồn KHÔNG quét sâu (deep_pages_per_run = 0); nguồn quét sâu hết hạn theo vòng quét trọn.
 expire_unseen_days = 14
 
 [sources.topcv]
@@ -28,15 +29,53 @@ enabled = true
 start_url = "https://www.careerlink.vn/vieclam/list"
 # 2026-11-03: CareerLink hạn chế ngầm (trả trang không có tin, HTTP 200) sau ~25 request/1 phút và ~55 request/9 phút
 # → giới hạn theo SỐ request trong một khoảng thời gian; tự gỡ sau ~3,5 giờ. Tôn trọng: mỗi lần chạy ≤ ~50 request
-# (35 danh sách + 15 chi tiết), lịch 4 lần/ngày cách 6 giờ (scripts/run_nightly.ps1), dừng ngay khi phát hiện.
+# (40 danh sách + 10 chi tiết), cách nhau ≥ 4 giờ (`start` hoặc Task Scheduler — chọn một), dừng ngay khi phát hiện.
 min_delay_seconds = 10
-max_requests = 35
+max_requests = 40
 max_pages = 10
 stop_after_known_pages = 3
+# Quét sâu: sau phần đầu danh sách, đọc tiếp N trang từ chỗ dừng lần trước (crawl_listings.resume_page) → danh sách
+# chung 688 trang (~34.400 tin) được phủ dần qua nhiều lần chạy thay vì chỉ ~10 trang đầu. Vẫn trong `max_requests`.
+# Quét toàn site (2026-11-04): 25 trang sâu/lần (lùi 2) → ~23 trang mới/lần; 6 lần/ngày ≈ 5 ngày/vòng.
+deep_pages_per_run = 25
+# Lùi N trang khi đọc tiếp: tin phía trên hết hạn làm các tin dịch lên trang đã đọc → không sót tin.
+deep_overlap_pages = 2
 # Tầng 2: số trang chi tiết (JSON-LD: ngành, kinh nghiệm, ngày đăng, hạn nộp) đọc mỗi lần chạy, mới nhất trước
-detail_max_per_run = 15
+detail_max_per_run = 10
 # Duyệt thêm trang theo ngành/tỉnh tự phát hiện trên trang (gắn được ngành cho tin)
 max_listings = 150
+
+[sources.vieclam24h]
+# Khảo sát 2026-11-04: robots cho phép, bot tự khai danh tính nhận 200, không challenge. Trang danh sách nhúng dữ liệu
+# có cấu trúc (__NEXT_DATA__, 30 tin/trang, tổng ~17.000 tin): ngành/nghề, tỉnh, kinh nghiệm, cấp bậc, lương số, ngày
+# đăng, hạn nộp → không cần trang chi tiết. Trang tìm nhanh chỉ phân trang ~34 trang → thêm 53 trang theo nghề.
+enabled = true
+start_url = "https://vieclam24h.vn/tim-kiem-viec-lam-nhanh"
+min_delay_seconds = 10
+max_requests = 55
+# 2026-11-04: trang 2 (`?page=2`) trả 403 cho bot (robots không cấm) → tạm chỉ đọc trang 1 của trang tìm nhanh + 53
+# trang nghề (ước ~1.600 tin/lần, chưa chạy thật với cấu hình này), không thử vượt. Thử lại phân trang sau: đặt max_pages = 34.
+max_pages = 1
+stop_after_known_pages = 3
+deep_pages_per_run = 0
+max_listings = 60
+# Có hạn nộp từng tin → trạng thái theo hạn nộp; không đánh dấu hết hạn vì "không thấy" (danh sách chỉ phân trang
+# ~34 trang mỗi nghề, không phủ trọn mỗi lần).
+expire_unseen = false
+
+[sources.careerviet]
+# Khảo sát 2026-11-04: robots (User-agent: *) chỉ cấm /vi/jobs/*, /api/*… → trang danh sách được phép; bot tự khai danh
+# tính nhận 200. 50 tin/trang, danh sách "tất cả việc làm" phân trang …-trang-<n>-vi.html. Thẻ tin: lương, tỉnh, hạn
+# nộp, ngày cập nhật, ngành (1–3 mục). Một số tin không có hạn nộp → hết hạn theo vòng quét trọn như CareerLink.
+enabled = true
+start_url = "https://careerviet.vn/viec-lam/tat-ca-viec-lam-vi.html"
+min_delay_seconds = 10
+max_requests = 40
+max_pages = 10
+stop_after_known_pages = 3
+deep_pages_per_run = 25
+deep_overlap_pages = 2
+max_listings = 5  # chưa dùng: CareerViet chỉ có 1 danh sách chung (không phát hiện danh mục)
 
 [sources.jobsgo]
 # TẮT 2026-11-03: lần chạy thật bị 403 challenge ngay trang đầu (khảo sát bằng curl trước đó vẫn 200).
@@ -49,7 +88,7 @@ stop_after_known_pages = 2
 
 [normalize]
 fx_usd_vnd = 25500
-salary_min_valid = 3_000_000
+salary_min_valid = 1_000_000  # chỉ bắt lỗi đơn vị (vd "0.1 triệu"); lương thực tập/part-time 1–3 triệu là thật
 salary_max_valid = 500_000_000
 week_to_month = 4.33
 hour_to_month = 208
@@ -59,8 +98,10 @@ min_n_salary = 5
 min_vol_trend = 10
 trend_threshold = 0.10
 window_days = 30
-# Nguồn không cho biết trạng thái tin: coi là đang tuyển nếu thấy trong N ngày gần nhất
-active_seen_days = 7
+# Nguồn không cho biết trạng thái tin: coi là đang tuyển nếu thấy trong N ngày gần nhất. 0 = tin chưa bị đánh dấu
+# hết hạn là còn tuyển — dùng với quét sâu (một vòng quét CareerLink mất nhiều ngày; hết hạn do vòng quét trọn
+# quyết định, xem pipeline.mark_expired).
+active_seen_days = 0
 # Khoảng lương rộng hơn N lần (vd 10–200 triệu "lương cứng + hoa hồng") → không vào thống kê lương; 0 = tắt
 max_range_ratio = 5
 # Tin chưa có ngày đăng mà thấy lần đầu trong N ngày đầu tiên thu thập nguồn = tồn sẵn → không tính là tin mới

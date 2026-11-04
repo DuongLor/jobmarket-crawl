@@ -5,10 +5,13 @@ KHÔNG thử vượt: không đổi User-Agent, không giải challenge, không 
 """
 
 import time
-import urllib.robotparser
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
+
+from jobmarket.fetch.robots import RobotsRules
+
+MAX_REDIRECTS = 5
 
 CHALLENGE_MARKERS = ("just a moment", "cf-chl", "enable javascript and cookies", "captcha")
 
@@ -29,10 +32,11 @@ class PoliteClient:
         self._client = httpx.Client(
             headers={"User-Agent": self.user_agent, "Accept-Language": "vi,en;q=0.8"},
             timeout=float(cfg["timeout_seconds"]),
-            follow_redirects=True,
+            # Tự theo chuyển hướng để kiểm robots.txt + giãn cách cho TỪNG bước (kể cả sang host khác)
+            follow_redirects=False,
             transport=transport,
         )
-        self._robots: dict[str, urllib.robotparser.RobotFileParser] = {}
+        self._robots: dict[str, RobotsRules] = {}
         self._last_request_at: dict[str, float] = {}
         self.requests_made = 0
 
@@ -47,41 +51,65 @@ class PoliteClient:
                 time.sleep(delay)
         self._last_request_at[host] = time.monotonic()
 
-    def _robots_for(self, url: str) -> urllib.robotparser.RobotFileParser:
+    def _robots_for(self, url: str) -> RobotsRules:
         parts = urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
         if origin not in self._robots:
-            parser = urllib.robotparser.RobotFileParser()
             self._wait_turn(parts.netloc)
-            resp = self._client.get(f"{origin}/robots.txt")
+            # RFC 9309: theo tối đa 5 lần chuyển hướng khi đọc robots.txt
+            resp = self._client.get(f"{origin}/robots.txt", follow_redirects=True)
             self.requests_made += 1
-            # RFC 9309: 4xx (không có robots.txt) = không hạn chế; 5xx (máy chủ lỗi) = coi như cấm hết
+            # 4xx (không có robots.txt) = không hạn chế; 5xx (máy chủ lỗi) = coi như cấm hết
             if resp.status_code >= 500:
-                parser.parse(["User-agent: *", "Disallow: /"])
+                rules = RobotsRules(["User-agent: *", "Disallow: /"])
             else:
-                parser.parse(resp.text.splitlines() if resp.status_code == 200 else [])
-            self._robots[origin] = parser
+                rules = RobotsRules(resp.text.splitlines() if resp.status_code == 200 else [])
+            self._robots[origin] = rules
         return self._robots[origin]
 
-    def get(self, url: str) -> str:
+    def _check(self, url: str) -> None:
         if not self._robots_for(url).can_fetch(self.user_agent, url):
             raise Disallowed(url)
-        host = urlsplit(url).netloc
+
+    def get(self, url: str) -> str:
+        self._check(url)
         for attempt in range(self.max_retries + 1):
-            self._wait_turn(host)
-            resp = self._client.get(url)
-            self.requests_made += 1
+            resp = self._fetch_following_redirects(url)
             body = resp.text
             if is_challenge(resp.status_code, body):
                 raise Blocked(f"{resp.status_code} challenge at {url}")
-            if resp.status_code in (429, 503) and attempt < self.max_retries:
-                time.sleep(self.min_delay * (2 ** (attempt + 1)))
-                continue
+            # 429 = nguồn yêu cầu giảm tốc → dừng ngay (không thử lại trong cùng lần chạy)
             if resp.status_code in (403, 429):
                 raise Blocked(f"{resp.status_code} at {url}")
+            if resp.status_code == 503 and attempt < self.max_retries:
+                wait = _retry_after(resp) or self.min_delay * (2 ** (attempt + 1))
+                if wait > 300:  # nguồn báo nghỉ lâu → dừng, lần chạy sau thử lại
+                    raise Blocked(f"503 Retry-After {wait:.0f}s at {url}")
+                time.sleep(wait)
+                continue
             resp.raise_for_status()
             return body
         raise Blocked(f"retries exhausted at {url}")
+
+    def _fetch_following_redirects(self, url: str) -> httpx.Response:
+        current = url
+        for _ in range(MAX_REDIRECTS + 1):
+            self._wait_turn(urlsplit(current).netloc)
+            resp = self._client.get(current)
+            self.requests_made += 1
+            location = resp.headers.get("location")
+            if not (resp.is_redirect and location):
+                return resp
+            current = urljoin(current, location)
+            self._check(current)  # đích chuyển hướng cũng phải được robots.txt cho phép
+        raise Blocked(f"quá {MAX_REDIRECTS} lần chuyển hướng từ {url}")
+
+
+def _retry_after(resp: httpx.Response) -> float | None:
+    try:
+        return float(resp.headers.get("retry-after", ""))
+    except ValueError:
+        return None
 
 
 # Trang xác minh người dùng trả HTTP 200 (CareerLink, 2026-11-03: trang chi tiết hiện hộp "Xác nhận bạn không phải

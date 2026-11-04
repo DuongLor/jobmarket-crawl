@@ -21,14 +21,15 @@ if not c.empty_state(ctx):
     comparable = timed and c.window_comparable(ctx, days)  # kỳ trước nằm trọn sau ngày bắt đầu thu thập
     cols = st.columns(5)
     cols[0].metric("Tổng tin duy nhất", c.fmt_int(o["unique_jobs"]))
-    cols[1].metric("Tin đang tuyển", "—" if ctx.historical else c.fmt_int(o["active"]))
-    cols[2].metric(f"Tin mới {days} ngày", c.fmt_int(o["new_window"]) if timed else "—")
+    cols[1].metric("Tin đang tuyển", "—" if ctx.historical else c.fmt_int(o["active"]),
+                   help=None if ctx.historical else c.active_help(o))  # fmt: skip
+    cols[2].metric(f"Tin đăng/làm mới {days} ngày", c.fmt_int(o["new_window"]) if timed else "—")
     cols[3].metric(f"Δ so {days} ngày trước", c.fmt_delta(o["new_delta"]) if comparable else "—",
                    help=None if comparable else f"So được khi đã thu thập đủ {2 * days} ngày — kỳ trước ngày bắt "
                    "đầu thu thập luôn thiếu tin.")  # fmt: skip
     cols[4].metric("Chưa phân loại ngành", c.fmt_int(ctx.df["industry_code"].isna().sum()))
 
-    labels = {"total": "Tổng tin", "share": "Tỷ trọng", "active": "Đang tuyển", "new": f"Mới {days} ngày",
+    labels = {"total": "Tổng tin", "share": "Tỷ trọng", "active": "Đang tuyển", "new": f"Đăng/làm mới {days} ngày",
               "prev": f"{days} ngày trước", "delta": f"Δ% {days} ngày", "rank": "Hạng"}  # fmt: skip
 
     def show(dim: str, column: str, title: str, note: str, key: str, missing_label: str) -> None:
@@ -51,27 +52,28 @@ if not c.empty_state(ctx):
 
     tab_ind, tab_loc, tab_time, tab_heat = st.tabs(["Theo ngành", "Theo địa phương", "Theo thời gian", "Bản đồ nhiệt"])
     with tab_ind:
-        show("industry", "Ngành", "Phân bổ theo ngành", "Mỗi tin thuộc một ngành; tổng các nhóm bằng tổng tin "
-             "duy nhất, gồm cả “(chưa phân loại)”.", "csv_ind", "ngành")  # fmt: skip
+        show("industry", "Ngành", "Phân bổ theo ngành", "Tổng các nhóm bằng số tin tính cơ cấu, gồm cả “(chưa phân "
+             "loại)”. " + c.industry_share_note(ctx), "csv_ind", "ngành")  # fmt: skip
     with tab_loc:
         show("province", "Địa phương", "Phân bổ theo địa phương", "Tin nhiều địa điểm chỉ lấy địa điểm đầu tiên. "
              "Tỉnh quy về 34 đơn vị hành chính sau sáp nhập 2025.", "csv_loc", "địa phương")  # fmt: skip
     with tab_time:
         if ctx.historical:
-            c.snapshot_note("tin mới theo tháng")
+            c.snapshot_note("tin đăng/làm mới theo tháng")
         elif not timed:
-            st.subheader("Tin mới theo tháng")
-            c.no_dates_note("tin mới theo tháng")
+            st.subheader("Tin đăng/làm mới theo tháng")
+            c.no_dates_note("tin đăng/làm mới theo tháng")
         else:
-            st.subheader("Tin mới theo tháng")
-            st.caption("Theo ngày đăng; tin xuất hiện sau ngày bắt đầu thu thập mà thiếu ngày đăng thì dùng ngày "
-                       "thấy lần đầu. Tin có sẵn lúc bắt đầu (chưa rõ ngày) không tính.")  # fmt: skip
+            st.subheader("Tin đăng/làm mới theo tháng")
+            st.caption("Theo ngày đăng (CareerLink/CareerViet: ngày làm mới); tin thiếu ngày thì dùng ngày thấy lần "
+                       "đầu. Chỉ từ tháng bắt đầu thu thập; tin tồn sẵn không tính. MoM của tháng bắt đầu giữa chừng "
+                       "và tháng kế tiếp để trống.")  # fmt: skip
             m = stats.monthly(ctx.df, ctx.as_of.replace(day=1), months=12)
-            fig = px.line(m, x="month", y="total", markers=True, labels={"month": "", "total": "Tin mới"})
+            fig = px.line(m, x="month", y="total", markers=True, labels={"month": "", "total": "Tin đăng/làm mới"})
             fig.update_layout(height=300, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig, width="stretch")
             st.dataframe(m.assign(mom=[c.fmt_delta(v) for v in m["mom"]]).rename(
-            columns={"month": "Tháng", "total": "Tổng tin mới", "mom": "MoM", **c.SOURCE_NAMES}),
+            columns={"month": "Tháng", "total": "Tổng tin đăng/làm mới", "mom": "MoM", **c.SOURCE_NAMES}),
             hide_index=True, width="stretch")  # fmt: skip
             c.csv_button(m, "tin_moi_theo_thang", "csv_time")
             st.warning("**Thiên lệch giai đoạn đầu:** trước ngày bắt đầu thu thập chỉ còn thấy tin chưa hết hạn. "
@@ -85,7 +87,8 @@ if not c.empty_state(ctx):
                             labels={"x": "", "y": "", "color": "Số tin"})  # fmt: skip
             fig.update_layout(height=max(320, 32 * len(h)), margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig, width="stretch")
-            st.caption("Hiện 12 địa phương nhiều tin nhất, chỉ tin đã phân loại ngành; bảng CSV có đủ.")
+            st.caption("Hiện 12 địa phương nhiều tin nhất, chỉ tin đã phân loại ngành; bảng CSV có đủ. "
+                       + c.industry_share_note(ctx))  # fmt: skip
             c.csv_button(h.reset_index(), "ban_do_nhiet_nganh_tinh", "csv_heat")
 
 c.footer(ctx)

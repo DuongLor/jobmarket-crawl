@@ -1,6 +1,8 @@
 # Plan — Dự án độc lập `jobmarket-crawl/`: Crawl & thống kê thị trường tuyển dụng (dùng cá nhân để tham khảo, theo dõi)
 
-> **Trạng thái:** plan v2, chưa code · 2026-11-03 · **Đã chốt: chỉ dùng cá nhân** (1 người dùng, chạy máy cá nhân, không chia sẻ/công khai dữ liệu). Q1–Q7 tạm theo cột "Đề xuất" ở B11 cho tới khi user đổi.
+> **Cập nhật 2026-11-04:** đã code Bước 1–5. Nguồn thực tế khác plan: crawl CareerLink / Việc Làm 24h / CareerViet (TopCV chặn bot → chỉ nạp trang tự lưu; VietnamWorks chưa làm; VietJobs là dữ liệu lịch sử) — xem `docs/spike-0.md` lượt 4–8 và README. Khi plan và code/README lệch nhau: **code > README / spike-0 > plan**.
+>
+> **Trạng thái:** plan v2 · 2026-11-03 · **Đã chốt: chỉ dùng cá nhân** (1 người dùng, chạy máy cá nhân, không chia sẻ/công khai dữ liệu). Q1–Q7 tạm theo cột "Đề xuất" ở B11 cho tới khi user đổi.
 > **Đổi so với v1:** v1 tích hợp vào CCareer (DB, quyền, màn admin trong `ccareer/` + `ccareerfe/`). Theo yêu cầu mới, dự án **tách hẳn**: không dùng code, DB, master data, quyền hay quy ước của CCareer. Bản v1 lưu ở `_trash/task24-plan.v1-tich-hop-ccareer.md`.
 > **Nguồn (đều trong `docs/`):** [`ycau-goc.md`](./ycau-goc.md) (yêu cầu gốc viết cho C-Career) · [`mockup.xlsx`](./mockup.xlsx) (workbook 14 tab) · [`ui-lowfi.html`](./ui-lowfi.html) (mockup giao diện, B6)
 > **Vị trí:** `D:\Project\ccareer-project\jobmarket-crawl\` — git repo riêng (nhánh `develop`), không liên quan CCareer (giống `cbase/`). Tạo 2026-11-03.

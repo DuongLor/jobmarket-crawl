@@ -4,6 +4,9 @@ import json
 import os
 import subprocess
 import sys
+import time
+import webbrowser
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -12,16 +15,20 @@ from jobmarket import labels, report
 from jobmarket.config import DB_ENV, PROJECT_ROOT, load_config
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
 from jobmarket.pipeline import (
+    backfill_industry_labels,
     backfill_posted_dates,
     enrich_details,
     import_saved_pages,
     raw_dir_exists,
+    reapply_detail_industries,
+    renormalize_salaries,
     run_paged,
     run_topcv,
 )
-from jobmarket.sources import careerlink, jobsgo, vietjobs
+from jobmarket.sources import careerlink, careerviet, jobsgo, vieclam24h, vietjobs
 from jobmarket.sources.clean_csv import import_clean_csv
 from jobmarket.store.db import init_db
+from jobmarket.timeutil import now_local
 
 # Console Windows mặc định cp1252 → in tiếng Việt bị UnicodeEncodeError
 for _stream in (sys.stdout, sys.stderr):
@@ -50,7 +57,13 @@ def init() -> None:
     typer.echo(f"DB: {cfg.path('db_file')}  {json.dumps(counts)}")
 
 
-PAGED_SOURCES = {"careerlink": careerlink, "jobsgo": jobsgo}
+def _client_for(cfg, name: str) -> PoliteClient:
+    """Khoảng nghỉ riêng từng nguồn (vd CareerLink hạn chế khi đọc nhanh) ghi đè mặc định [crawl]."""
+    delay = cfg.source(name).get("min_delay_seconds")
+    return PoliteClient({**cfg.crawl, **({"min_delay_seconds": delay} if delay else {})})
+
+
+PAGED_SOURCES = {"careerlink": careerlink, "jobsgo": jobsgo, "vieclam24h": vieclam24h, "careerviet": careerviet}
 
 
 def run_source(conn, cfg, client, name: str, max_pages: int | None) -> int:
@@ -63,6 +76,10 @@ def run_source(conn, cfg, client, name: str, max_pages: int | None) -> int:
 def run(
     source: str = typer.Option("all", help="Tên nguồn, hoặc 'all' = mọi nguồn đang bật trong config.toml"),
     max_pages: int | None = typer.Option(None, help="Số trang tối đa mỗi danh sách (ghi đè config; lần đầu lấy nhiều)"),
+    min_hours: float = typer.Option(
+        3.5, help="Bỏ qua nguồn đã chạy trong N giờ qua (CareerLink hạn chế ~3,5 giờ; tránh dồn với `start`)"
+    ),
+    force: bool = typer.Option(False, "--force", help="Chạy dù chưa đủ khoảng cách (chỉ khi biết chắc)"),
 ) -> None:
     """Thu thập + chuẩn hoá. Exit code 1 nếu có nguồn thất bại (để Task Scheduler biết)."""
     cfg = load_config()
@@ -73,9 +90,12 @@ def run(
     raw_dir_exists(cfg)
     failed = False
     for name in names:
-        # Khoảng nghỉ riêng từng nguồn (vd CareerLink hạn chế khi đọc nhanh) ghi đè mặc định [crawl]
-        source_delay = cfg.source(name).get("min_delay_seconds")
-        client = PoliteClient({**cfg.crawl, **({"min_delay_seconds": source_delay} if source_delay else {})})
+        due, next_at = _crawl_due(conn, name, min_hours)
+        if not (due or force):
+            skipped = f"đã chạy trong {min_hours:g} giờ qua; lần tới {next_at}"
+            typer.echo(json.dumps({"source": name, "skipped": skipped}, ensure_ascii=False))
+            continue
+        client = _client_for(cfg, name)
         try:
             run_id = run_source(conn, cfg, client, name, max_pages)
         finally:
@@ -97,10 +117,11 @@ def enrich(
     """Chỉ chạy tầng 2: bổ sung ngành/kinh nghiệm/ngày đăng/hạn nộp từ trang chi tiết cho tin chưa bổ sung."""
     cfg = load_config()
     adapter = PAGED_SOURCES[source]
+    if not hasattr(adapter, "parse_detail"):
+        raise typer.BadParameter(f"Nguồn {source} không có tầng trang chi tiết (robots cấm hoặc chưa hỗ trợ)")
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
-    delay = cfg.source(source).get("min_delay_seconds")
-    client = PoliteClient({**cfg.crawl, **({"min_delay_seconds": delay} if delay else {})})
+    client = _client_for(cfg, source)
     try:
         counts = enrich_details(conn, cfg, client, adapter, limit)
     except (Blocked, Disallowed) as exc:
@@ -114,15 +135,162 @@ def enrich(
     typer.echo(f"{counts} · còn chờ bổ sung: {pending} tin · request: {client.requests_made}")
 
 
+def _saved_pages(folder: Path) -> list[Path]:
+    return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in (".html", ".htm")]
+
+
+class InboxWatcher:
+    """Nạp trang TopCV bạn tự lưu vào inbox, chỉ khi file đã lưu xong (kích thước + giờ sửa không đổi giữa 2 lần
+    kiểm tra). File không nạp được (không phải trang tin) báo 1 lần, không thử lại tới khi file đổi."""
+
+    def __init__(self, conn, cfg, folder: Path):
+        self.conn, self.cfg, self.folder = conn, cfg, folder
+        self.previous: dict[Path, tuple[int, float]] = {}
+        self.tried: set[tuple[Path, float]] = set()
+        folder.mkdir(parents=True, exist_ok=True)
+
+    def poll(self) -> int | None:
+        current = {}
+        for p in _saved_pages(self.folder):
+            try:
+                st = p.stat()
+            except OSError:  # file vừa bị chuyển/xoá (vd run_nightly.ps1 nạp cùng lúc)
+                continue
+            current[p] = (st.st_size, st.st_mtime)
+        ready = [p for p, sig in current.items() if self.previous.get(p) == sig and (p, sig[1]) not in self.tried]
+        self.previous = current
+        if not ready:
+            return None
+        run_id = import_saved_pages(self.conn, self.cfg, ready)
+        self.tried.update((p, current[p][1]) for p in ready if p.exists())  # còn ở inbox = không nạp được
+        return run_id
+
+
+@app.command()
+def watch(
+    folder: Path = typer.Argument(None, help="Thư mục theo dõi (mặc định data/inbox/topcv)"),
+    interval: float = typer.Option(10, help="Số giây giữa 2 lần kiểm tra"),
+) -> None:
+    """Chỉ tự nạp trang TopCV bạn vừa lưu (Ctrl+S) vào inbox — không request mạng. Dừng: Ctrl+C."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    raw_dir_exists(cfg)
+    watcher = InboxWatcher(conn, cfg, folder or cfg.path("data_dir") / "inbox" / "topcv")
+    typer.echo(f"Đang theo dõi {watcher.folder} (mỗi {interval:g} giây). Ctrl+C để dừng.")
+    try:
+        while True:
+            if (run_id := watcher.poll()) is not None:
+                _print_run(conn, run_id)
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        typer.echo("Đã dừng theo dõi.")
+
+
+def _crawl_due(conn, name: str, hours: float) -> tuple[bool, str | None]:
+    """Đến giờ crawl nguồn chưa: lần chạy gần nhất (kể cả lỗi/bị chặn, ghi trong DB) cách hiện tại ≥ `hours` giờ."""
+    last = conn.execute("SELECT MAX(started_at) FROM runs WHERE source = ?", (name,)).fetchone()[0]
+    if not last:
+        return True, None
+    next_at = datetime.fromisoformat(last) + timedelta(hours=hours)
+    return datetime.fromisoformat(now_local()) >= next_at, next_at.strftime("%H:%M %d/%m")
+
+
+@app.command()
+def start(
+    every_hours: float = typer.Option(
+        4, help="Khoảng cách tối thiểu giữa 2 lần crawl mỗi nguồn (CareerLink: ≥ ~3,5 giờ)"
+    ),
+    port: int = typer.Option(8501, help="Cổng dashboard"),
+    crawl: bool = typer.Option(True, help="--no-crawl: chỉ dashboard + tự nạp TopCV"),
+    open_browser: bool = typer.Option(True, help="Mở dashboard trên trình duyệt"),
+    now: bool = typer.Option(False, "--now", help="Crawl ngay khi mở (bỏ qua khoảng cách lần đầu), sau đó cách đều"),
+) -> None:
+    """MỘT LỆNH CHẠY TẤT CẢ: dashboard (chỉ máy này) + tự nạp trang TopCV bạn lưu + crawl nguồn đang bật cách nhau
+    ≥ `every_hours` giờ (tính từ lần chạy cuối trong DB, tắt/mở lại không crawl dồn). Dừng: Ctrl+C."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    raw_dir_exists(cfg)
+    log_dir = cfg.path("data_dir") / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    def say(message: str) -> None:
+        line = f"[{datetime.now():%H:%M:%S}] {message}"
+        typer.echo(line)
+        with (log_dir / f"start_{datetime.now():%Y-%m-%d}.log").open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+
+    url = f"http://127.0.0.1:{port}"
+    dashboard = subprocess.Popen(
+        [sys.executable, "-m", "streamlit", "run", str(PROJECT_ROOT / "dashboard" / "app.py"), "--server.address",
+         "127.0.0.1", "--server.port", str(port), "--server.headless", "true"],
+        stdout=(log_dir / "dashboard.log").open("a", encoding="utf-8"), stderr=subprocess.STDOUT,
+    )  # fmt: skip
+    say(f"Dashboard: {url} (chỉ máy này mở được)")
+    if open_browser:
+        time.sleep(4)
+        webbrowser.open(url)
+    watcher = InboxWatcher(conn, cfg, cfg.path("data_dir") / "inbox" / "topcv")
+    say(f"Tự nạp trang TopCV bạn lưu vào: {watcher.folder}")
+    sources = [n for n, s in cfg.raw["sources"].items() if s.get("enabled")] if crawl else []
+    say(f"Crawl tự động: {', '.join(sources) or 'tắt'} — mỗi nguồn cách nhau ≥ {every_hours:g} giờ. Ctrl+C để dừng.")
+    announced: dict[str, str | None] = {}
+    forced = set(sources) if now else set()  # --now: mỗi nguồn crawl ngay 1 lần, sau đó theo khoảng cách
+    try:
+        while True:
+            if dashboard.poll() is not None:
+                say(f"Dashboard dừng (mã {dashboard.returncode}) — xem data/logs/dashboard.log (cổng {port} đang bận?)")
+                raise typer.Exit(code=1)
+            try:
+                run_id = watcher.poll()
+            except Exception as exc:  # lỗi tự nạp không làm tắt dashboard + crawl
+                say(f"TopCV: lỗi tự nạp {type(exc).__name__}: {exc}")
+                run_id = None
+            if run_id is not None:
+                row = conn.execute("SELECT posts_new, posts_updated, error_sample FROM runs WHERE id = ?", (run_id,))
+                new, updated, errors = row.fetchone()
+                say(f"TopCV: nạp {new} tin mới, cập nhật {updated}" + (f" · lỗi: {errors}" if errors != "[]" else ""))
+            for name in sources:
+                due, next_at = _crawl_due(conn, name, every_hours)
+                due = due or name in forced
+                forced.discard(name)
+                if not due:
+                    if announced.get(name) != next_at:
+                        say(f"{name}: lần crawl tới lúc {next_at}")
+                        announced[name] = next_at
+                    continue
+                budget = int(cfg.source(name).get("max_requests", cfg.crawl.get("max_requests", 50)))
+                detail = int(cfg.source(name).get("detail_max_per_run", 0))
+                extra = f" + {detail} trang chi tiết" if detail else ""
+                pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
+                say(f"{name}: bắt đầu crawl (≤ {budget} request danh sách{extra}, ~{pace} giây/request)…")
+                client = _client_for(cfg, name)
+                try:
+                    run_id = run_source(conn, cfg, client, name, None)
+                    r = conn.execute("SELECT status, posts_new, posts_updated, error_sample FROM runs WHERE id = ?",
+                                     (run_id,)).fetchone()  # fmt: skip
+                    say(f"{name}: {r['status']} · {r['posts_new']} tin mới · {r['posts_updated']} cập nhật · "
+                        f"{client.requests_made} request · {r['error_sample']}")  # fmt: skip
+                except Exception as exc:  # lỗi 1 lần chạy không làm dừng cả chương trình
+                    say(f"{name}: lỗi {type(exc).__name__}: {exc}")
+                finally:
+                    client.close()
+            time.sleep(10)
+    except KeyboardInterrupt:
+        say("Đang dừng…")
+    finally:
+        dashboard.terminate()
+        say("Đã dừng dashboard, tự nạp và crawl.")
+
+
 @app.command("import-html")
 def import_html(
     folder: Path = typer.Argument(None, help="Thư mục chứa trang TopCV đã lưu (mặc định data/inbox/topcv)"),
 ) -> None:
-    """Nạp trang danh sách TopCV do bạn tự lưu bằng trình duyệt (Ctrl+S, dạng 'Webpage, HTML only')."""
+    """Nạp trang TopCV (danh sách hoặc chi tiết tin) do bạn tự lưu bằng trình duyệt (Ctrl+S, 'Webpage, HTML only')."""
     cfg = load_config()
     folder = folder or cfg.path("data_dir") / "inbox" / "topcv"
     folder.mkdir(parents=True, exist_ok=True)
-    files = [p for p in folder.iterdir() if p.suffix.lower() in (".html", ".htm")]
+    files = _saved_pages(folder)
     if not files:
         typer.echo(f"Không có file .html trong {folder}")
         raise typer.Exit()
@@ -159,10 +327,26 @@ def remap() -> None:
 
 @app.command()
 def backfill(source: str = typer.Option("careerlink", help="Nguồn có thẻ tin đã lưu trong data/raw")) -> None:
-    """Điền ngày đăng còn trống từ thẻ tin đã lưu (data/raw) — không request mạng."""
+    """Tính lại từ bản gốc đã lưu (data/raw), không request mạng: ngày đăng còn trống, ngành từ trang chi tiết."""
     cfg = load_config()
     conn = init_db(cfg.path("db_file"))
-    typer.echo(f"{backfill_posted_dates(conn, cfg, PAGED_SOURCES[source])}")
+    adapter = PAGED_SOURCES[source]
+    if hasattr(adapter, "card_date"):
+        typer.echo(f"ngày đăng: {backfill_posted_dates(conn, cfg, adapter)}")
+    if hasattr(adapter, "parse_detail"):
+        typer.echo(f"ngành (trang chi tiết): {reapply_detail_industries(conn, cfg, adapter)}")
+    typer.echo(f"mục ngành của tin (đếm chia đều): {backfill_industry_labels(conn, cfg, source)}")
+
+
+@app.command()
+def renormalize(
+    source: list[str] = typer.Option([], help="Nguồn cần chuẩn hoá lại lương (mặc định: mọi nguồn có trong DB)"),
+) -> None:
+    """Chuẩn hoá lại lương từ chuỗi gốc đã lưu (sau khi đổi quy tắc/ngưỡng trong config.toml) — không request mạng."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    for name in source or [r[0] for r in conn.execute("SELECT DISTINCT source FROM job_posts ORDER BY source")]:
+        typer.echo(f"{name}: {renormalize_salaries(conn, cfg, name)}")
 
 
 @app.command("report")
@@ -208,12 +392,14 @@ def demo() -> None:
 
 @app.command()
 def dashboard(demo: bool = typer.Option(False, "--demo", help="Dùng data/demo.db (dữ liệu mẫu)")) -> None:
-    """Mở dashboard Streamlit (http://localhost:8501)."""
+    """Mở dashboard Streamlit (http://127.0.0.1:8501 — chỉ máy này)."""
     env = dict(os.environ)
     if demo:
         env[DB_ENV] = str(load_config().path("data_dir") / "demo.db")
     app_file = PROJECT_ROOT / "dashboard" / "app.py"
-    raise typer.Exit(subprocess.call([sys.executable, "-m", "streamlit", "run", str(app_file)], env=env))
+    # Chỉ máy này mở được (mặc định Streamlit nghe mọi card mạng → máy khác trong mạng LAN cũng xem được dữ liệu)
+    args = [sys.executable, "-m", "streamlit", "run", str(app_file), "--server.address", "127.0.0.1"]
+    raise typer.Exit(subprocess.call(args, env=env))
 
 
 def _print_run(conn, run_id: int) -> None:

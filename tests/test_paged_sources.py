@@ -211,7 +211,7 @@ def test_max_requests_caps_run(tmp_cfg):  # noqa: F811
     assert run["status"] == "partial" and "giới hạn 4 request" in run["error_sample"]
 
 
-def test_mark_expired_only_old_unknown(tmp_cfg):  # noqa: F811
+def test_mark_expired_only_jobs_not_seen_recently(tmp_cfg):  # noqa: F811
     from jobmarket.pipeline import mark_expired
     from jobmarket.store.db import now_iso
 
@@ -226,10 +226,10 @@ def test_mark_expired_only_old_unknown(tmp_cfg):  # noqa: F811
             "UPDATE job_posts SET last_seen_at = ?, status = 'active' WHERE id = ?", ("2020-01-01T00:00:00", ids[1])
         )
         conn.execute("UPDATE job_posts SET last_seen_at = ? WHERE id = ?", (today[:10] + "T00:00:01", ids[2]))
-    assert mark_expired(conn, "careerlink", 14) == 1
+    assert mark_expired(conn, "careerlink", 14) == 2
     status = dict(conn.execute("SELECT id, status FROM job_posts"))
     assert status[ids[0]] == "expired"  # unknown + lâu không thấy
-    assert status[ids[1]] == "active"  # trạng thái do nguồn cung cấp: không đụng
+    assert status[ids[1]] == "expired"  # active (từ trang chi tiết) nhưng đã gỡ khỏi danh sách → không tuyển mãi
     assert status[ids[2]] == "unknown"  # vừa thấy hôm nay (cùng ngày, khác giờ)
 
 
@@ -302,7 +302,8 @@ def test_second_run_starts_from_listings_not_crawled_last_time(tmp_cfg):  # noqa
     conn = init_db(tmp_cfg.path("db_file"))
     with conn:
         conn.execute(
-            "INSERT INTO crawl_listings VALUES ('careerlink', 'https://www.careerlink.vn/viec-lam/ke-toan/1', "
+            "INSERT INTO crawl_listings (source, url, label, last_crawled_at) VALUES ('careerlink', "
+            "'https://www.careerlink.vn/viec-lam/ke-toan/1', "
             "'Kế toán', '2026-11-03T10:00:00')"
         )
     handler, calls = paged_site(html, pages_with_jobs=1)
@@ -313,3 +314,141 @@ def test_second_run_starts_from_listings_not_crawled_last_time(tmp_cfg):  # noqa
     )
     crawled = {r[0] for r in conn.execute("SELECT url FROM crawl_listings")}
     assert "https://www.careerlink.vn/viec-lam/ngan-hang/5" in crawled
+
+
+def _deep_site(last: int, empty_from: int | None = None):
+    """Danh sách chung `last` trang, mỗi trang 6 tin KHÁC NHAU (mã tin gắn số trang); `empty_from` = giả lập bị
+    hạn chế ngầm từ trang đó (trả trang rỗng dù chưa tới trang cuối)."""
+    import re
+
+    calls = []
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        page = int(request.url.params.get("page", 1))
+        calls.append(page)
+        if page > last or (empty_from and page >= empty_from):
+            return httpx.Response(200, text=EMPTY)
+        html = re.sub(r"/(\d{7})\"", lambda m: f'/{page:03d}{m.group(1)}"', CL_HTML)
+        return httpx.Response(200, text=html.replace("<ul>", f'<a href="/vieclam/list?page={last}">{last}</a><ul>', 1))
+
+    return handler, calls
+
+
+def _main_only():
+    """Adapter CareerLink chỉ có danh sách chung (không tự phát hiện trang tỉnh/ngành) để test quét sâu."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        NAME=careerlink.NAME,
+        PROVIDES=careerlink.PROVIDES,
+        listings=lambda url, html: [careerlink.ListingPage(url, None)],
+        page_url=careerlink.page_url,
+        parse_listing=careerlink.parse_listing,
+        last_page=careerlink.last_page,
+    )
+
+
+def _deep_cfg(tmp_cfg, deep=3):  # noqa: F811
+    import dataclasses
+
+    raw = {**tmp_cfg.raw, "sources": {**tmp_cfg.raw["sources"]}}
+    raw["sources"]["careerlink"] = {**raw["sources"]["careerlink"], "deep_pages_per_run": deep}
+    return dataclasses.replace(tmp_cfg, raw=raw)
+
+
+def _resume(conn):
+    return conn.execute("SELECT resume_page FROM crawl_listings").fetchone()[0]
+
+
+def test_deep_crawl_continues_where_last_run_stopped(tmp_cfg):  # noqa: F811
+    cfg = _deep_cfg(tmp_cfg)
+    conn = init_db(cfg.path("db_file"))
+    handler, calls = _deep_site(last=20)
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    assert calls == [1, 2, 3, 4, 5] and _resume(conn) == 6  # 2 trang đầu + 3 trang sâu
+    calls.clear()
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    # đi tiếp từ trang 6, lùi 2 trang (deep_overlap_pages) phòng tin dịch lên → 4, 5, 6; không đọc lại trang 3
+    assert calls == [1, 2, 4, 5, 6] and _resume(conn) == 7
+    assert conn.execute("SELECT COUNT(*) FROM job_posts").fetchone()[0] == 6 * 6
+
+
+def test_deep_crawl_wraps_around_at_end_of_list(tmp_cfg):  # noqa: F811
+    cfg = _deep_cfg(tmp_cfg, deep=5)
+    conn = init_db(cfg.path("db_file"))
+    handler, calls = _deep_site(last=4)
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    assert calls == [1, 2, 3, 4] and _resume(conn) is None  # đã đọc tới trang cuối 4 → hết vòng, không tải trang 5
+
+
+def test_empty_page_without_known_last_page_does_not_close_sweep(tmp_cfg):  # noqa: F811
+    """Hồi quy B1 (2026-11-04): adapter không đọc được trang cuối + nguồn trả trang rỗng giữa chừng (hạn chế ngầm)
+    → KHÔNG được coi là quét trọn (sẽ đánh hết hạn nhầm mọi tin ở các trang sau)."""
+    from types import SimpleNamespace
+
+    cfg = _deep_cfg(tmp_cfg, deep=5)
+    conn = init_db(cfg.path("db_file"))
+    handler, _ = _deep_site(last=20, empty_from=4)
+    adapter = SimpleNamespace(**{k: v for k, v in vars(_main_only()).items() if k != "last_page"})
+    run_paged(conn, cfg, make_client(cfg, handler), adapter, max_pages=2)
+    _add_unknown_job(conn, "deep-page-job", "2026-01-01T00:00:00")
+    run_id = run_paged(conn, cfg, make_client(cfg, handler), adapter, max_pages=2)
+    full = conn.execute("SELECT last_full_sweep_started_at FROM crawl_listings").fetchone()[0]
+    assert full is None and _resume(conn) == 4
+    assert conn.execute("SELECT status FROM job_posts WHERE source_job_id = 'deep-page-job'").fetchone()[0] == "unknown"
+    assert "không chốt vòng quét" in conn.execute("SELECT error_sample FROM runs WHERE id = ?", (run_id,)).fetchone()[0]
+
+
+def test_empty_page_before_last_page_is_soft_block_and_keeps_position(tmp_cfg):  # noqa: F811
+    cfg = _deep_cfg(tmp_cfg)
+    conn = init_db(cfg.path("db_file"))
+    handler, _ = _deep_site(last=20, empty_from=4)
+    run_id = run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    run = conn.execute("SELECT status, error_sample FROM runs WHERE id = ?", (run_id,)).fetchone()
+    assert run["status"] == "partial" and "trang 4/20" in run["error_sample"]
+    assert _resume(conn) == 4  # lần sau đọc lại đúng trang bị chặn, không bỏ sót
+
+
+def _add_unknown_job(conn, job_id: str, last_seen: str, status: str = "unknown") -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO job_posts (source, source_job_id, title, status, dq_status, dq_flags, dedup_key, "
+            "first_seen_at, last_seen_at, first_run_id, last_run_id, normalizer_version) "
+            "VALUES ('careerlink', ?, 't', ?, 'ok', '', ?, ?, ?, 1, 1, 'v')",
+            (job_id, status, f"k{job_id}", last_seen, last_seen),
+        )
+
+
+def test_expiry_waits_for_a_full_sweep(tmp_cfg):  # noqa: F811
+    """Quét sâu: tin cũ chưa thấy lại KHÔNG bị hết hạn khi vòng quét chưa xong (có thể nằm ở trang chưa tới)."""
+    cfg = _deep_cfg(tmp_cfg, deep=2)
+    conn = init_db(cfg.path("db_file"))
+    handler, _ = _deep_site(last=20)
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    _add_unknown_job(conn, "old", "2026-01-01T00:00:00")
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
+    assert conn.execute("SELECT status FROM job_posts WHERE source_job_id = 'old'").fetchone()[0] == "unknown"
+
+
+def test_full_sweep_expires_jobs_not_seen_again(tmp_cfg):  # noqa: F811
+    cfg = _deep_cfg(tmp_cfg, deep=5)
+    conn = init_db(cfg.path("db_file"))
+    handler, _ = _deep_site(last=4)
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=1)  # thêm tin của danh sách
+    _add_unknown_job(conn, "gone", "2026-01-01T00:00:00")
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)  # vòng quét trọn trang 1 → 4
+    statuses = dict(conn.execute("SELECT source_job_id, status FROM job_posts"))
+    assert statuses.pop("gone") == "expired"
+    assert set(statuses.values()) == {"unknown"}  # tin thấy trong vòng quét vẫn còn tuyển
+
+
+def test_expired_job_seen_again_is_open_again(tmp_cfg):  # noqa: F811
+    conn = init_db(tmp_cfg.path("db_file"))
+    handler, _ = paged_site(CL_HTML, pages_with_jobs=1)
+    run_paged(conn, tmp_cfg, make_client(tmp_cfg, handler), careerlink, max_pages=1)
+    with conn:
+        conn.execute("UPDATE job_posts SET status = 'expired'")
+    run_paged(conn, tmp_cfg, make_client(tmp_cfg, handler), careerlink, max_pages=1)
+    assert {r[0] for r in conn.execute("SELECT status FROM job_posts")} == {"unknown"}

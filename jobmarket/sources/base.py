@@ -20,6 +20,8 @@ class RawJob:
     experience_raw: str | None = None
     level_raw: str | None = None
     industry_label: str | None = None
+    # Mọi mục ngành của chính tin, theo thứ tự nguồn (nguồn cho nhiều ngành/tin) → thống kê đếm chia đều
+    industry_labels: list[str] = field(default_factory=list)
     occupation_label: str | None = None
     skills_raw: str | None = None
     posted_date: str | None = None

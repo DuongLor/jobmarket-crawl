@@ -49,7 +49,7 @@ def test_overview_numbers_match_mockup(demo_db):
     metrics = {m.label: m.value for m in run("overview").metric}
     assert metrics["Tin duy nhất"] == "348"
     assert metrics["Đang tuyển"] == "64"
-    assert metrics["Tin mới 30 ngày"] == "59"
+    assert metrics["Tin đăng/làm mới 30 ngày"] == "59"
     assert metrics["Số công ty"] == "71"
     assert metrics["Lương trung vị"] == "14,5 triệu"
     assert metrics["Tin có lương số"] == "57,8%"
@@ -147,7 +147,9 @@ def test_datasets_are_not_mixed(mixed_db):
     assert not history.exception, [e.value for e in history.exception]
     metrics = {m.label: m.value for m in history.metric}
     assert metrics["Tin duy nhất"] == "5"
-    assert metrics["Đang tuyển"] == "—" and metrics["Tin mới 30 ngày"] == "—"  # ảnh chụp: không có chỉ số thời gian
+    assert (
+        metrics["Đang tuyển"] == "—" and metrics["Tin đăng/làm mới 30 ngày"] == "—"
+    )  # ảnh chụp: không có chỉ số thời gian
     assert any("ảnh chụp 07–10/2025" in i.value for i in history.info)
 
 
