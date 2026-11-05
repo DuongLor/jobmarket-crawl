@@ -146,19 +146,23 @@ def add_master(conn: sqlite3.Connection, label_type: str, name: str, industry_co
 
 
 def remap_rules(conn: sqlite3.Connection) -> dict[str, int]:
-    """Áp lại quy tắc cố định (bảng tỉnh/quận, nhóm kinh nghiệm, trùng đúng tên chuẩn) cho nhãn còn 'unmapped'.
+    """Áp lại quy tắc cố định (bảng tỉnh/quận, bí danh ngành/nhãn, nhóm kinh nghiệm, trùng đúng tên chuẩn) cho nhãn
+    còn 'unmapped' VÀ nhãn do chính quy tắc ánh xạ trước đây (`mapped_via = 'rule'`).
 
-    Dùng sau khi bổ sung seeds (vd thêm quận/huyện vào province_aliases.csv). Không đụng nhãn đã ánh xạ/bỏ qua tay.
+    Dùng sau khi sửa seeds (thêm quận/huyện, đổi ngành của một bí danh…): nhãn của quy tắc đi theo quy tắc hiện tại,
+    kể cả bỏ ánh xạ khi quy tắc không còn. KHÔNG đụng nhãn ánh xạ/bỏ qua tay (CLI, dashboard).
     """
     from jobmarket.pipeline import IGNORE, _rule_mapping
 
     changed: dict[str, int] = {}
-    rows = conn.execute("SELECT id, label_type, raw_label FROM labels WHERE status = 'unmapped'").fetchall()
+    rows = conn.execute(
+        "SELECT id, label_type, raw_label, status FROM labels WHERE status = 'unmapped' OR mapped_via = 'rule'"
+    ).fetchall()
     for row in rows:
         code = _rule_mapping(conn, row["label_type"], row["raw_label"])
-        if not code:
+        if not code and row["status"] == "unmapped":
             continue
-        action, master = ("ignore", None) if code == IGNORE else ("map", code)
+        action, master = ("ignore", None) if code == IGNORE else ("map", code) if code else ("unmap", None)
         if apply(conn, row["id"], action, master, reason="quy tắc cố định (remap)", via="rule"):
             changed[row["label_type"]] = changed.get(row["label_type"], 0) + 1
     return changed

@@ -9,6 +9,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
 
 from jobmarket.dedup import company_core
@@ -61,6 +62,8 @@ def company_identity(name: str) -> str:
 
 
 MAX_RANGE_RATIO = 5.0
+# Lương tháng đại diện cao hơn mức này gần như luôn là nhập sai/đơn vị khác (năm, tổng gói) → không vào thống kê
+MAX_MONTHLY_SALARY = 150_000_000
 BACKLOG_GRACE_DAYS = 0
 
 
@@ -69,6 +72,7 @@ def load_unique(
     filters: Filters | None = None,
     max_range_ratio: float | None = MAX_RANGE_RATIO,
     backlog_grace_days: int = BACKLOG_GRACE_DAYS,
+    max_monthly_salary: float | None = MAX_MONTHLY_SALARY,
 ) -> pd.DataFrame:
     """Tin duy nhất kèm tên chuẩn; mã chưa ánh xạ → tên nhóm "(chưa phân loại)".
 
@@ -78,6 +82,7 @@ def load_unique(
       Tin xuất hiện sau đó: ngày thấy lần đầu ≈ ngày đăng (thu thập hằng ngày).
     - Khoảng lương rộng bất thường (đầu trên > max_range_ratio × đầu dưới, thường "lương cứng + hoa hồng lên tới"):
       trung điểm không đại diện → không đưa vào thống kê lương (như dạng "tới X").
+    - Lương đại diện > max_monthly_salary/tháng (vd "500 triệu", "200 – 500 triệu"): nhập sai/đơn vị khác → loại.
     """
     df = pd.read_sql_query("SELECT * FROM v_jobs_unique ORDER BY first_seen_at, id", conn)
     for col in ("event_date", "posted_date", "deadline"):
@@ -100,6 +105,10 @@ def load_unique(
         wide = (df["salary_type"] == "range") & (df["salary_to"] > df["salary_from"] * float(max_range_ratio))
         df.loc[wide, "salary_mid"] = None
         df.loc[wide, "salary_excluded"] = "wide_range"
+    if max_monthly_salary:
+        high = df["salary_mid"] > float(max_monthly_salary)
+        df.loc[high, "salary_mid"] = None
+        df.loc[high, "salary_excluded"] = "too_high"
     for dim, (code_col, table, order_col) in DIMENSIONS.items():
         order = order_col or "rowid"
         rows = conn.execute(f"SELECT code, name, {order} FROM {table}").fetchall()
@@ -136,12 +145,13 @@ def industry_alloc(df: pd.DataFrame) -> pd.DataFrame:
     """Mỗi tin → (một hoặc nhiều) dòng ngành, trọng số 1/k khi tin có k ngành chuẩn khác nhau (đếm chia đều)."""
     if "industry_codes" not in df or df.empty:
         return df.assign(weight=1.0)
-    multi = df["industry_codes"].map(len) > 1
+    k = df["industry_codes"].map(len)
+    multi = k > 1
     single = df[~multi].assign(weight=1.0)
     if not multi.any():
         return single
-    spread = df[multi].assign(_alloc=df.loc[multi, "industry_codes"].map(list)).explode("_alloc")
-    spread["weight"] = 1.0 / df.loc[multi, "industry_codes"].map(len).reindex(spread.index)
+    spread = df[multi].assign(_alloc=df.loc[multi, "industry_codes"].map(list), weight=1.0 / k[multi])
+    spread = spread.explode("_alloc")
     spread["industry_code"] = spread["_alloc"].map(lambda t: t[0])
     spread["industry_name"] = spread["_alloc"].map(lambda t: t[1])
     spread["industry_order"] = spread["_alloc"].map(lambda t: t[2])
@@ -169,10 +179,14 @@ def _status_known(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
     không hạn nộp có thể đã đóng từ lâu → "chưa xác định", không cộng vào "đang tuyển"."""
     if df.empty:
         return pd.Series(dtype=bool)
+    # Chỉ vòng quét trọn của danh sách GỐC (start_url — cũng là mốc `mark_expired` dùng); một danh mục nhỏ quét xong
+    # không có nghĩa tin của cả nguồn đã được xét hết hạn.
     swept = {
         r[0]
         for r in conn.execute(
-            "SELECT DISTINCT source FROM crawl_listings WHERE last_full_sweep_started_at IS NOT NULL"
+            """SELECT DISTINCT c.source FROM crawl_listings c
+               JOIN runs r ON r.source = c.source AND c.url = json_extract(r.scope, '$.start_url')
+               WHERE c.last_full_sweep_started_at IS NOT NULL"""
         ).fetchall()
     }
     return (df["status"] != "unknown") | df["deadline"].notna() | df["source"].isin(swept)
@@ -309,9 +323,9 @@ def demand_by(
         .agg(total=("weight", "sum"), active=("active", "sum"), new=("new", "sum"), prev=("prev", "sum"))
         .reset_index()
     )
+    out["share"] = out["total"] / out["total"].sum() if len(df) else 0
     for col in ("total", "active", "new", "prev"):
         out[col] = _tidy_counts(out[col])
-    out["share"] = out["total"] / out["total"].sum() if len(df) else 0
     out["delta"] = [_delta(n, p) for n, p in zip(out["new"], out["prev"], strict=True)]
     unclassified = out[name].isin(set(UNCLASSIFIED.values()) | {UNCLASSIFIED_DEFAULT})
     # Hạng duy nhất: nhiều tin hơn đứng trước; bằng nhau thì theo thứ tự danh mục (khớp mockup)
@@ -323,14 +337,33 @@ def demand_by(
 
 
 def _tidy_counts(values: pd.Series) -> pd.Series:
-    """Số đếm có trọng số: nguyên hết → int; có phần lẻ (tin nhiều ngành) → làm tròn 1 chữ số."""
-    rounded = values.round(1)
-    return rounded.astype(int) if (rounded % 1 == 0).all() else rounded
+    """Số đếm có trọng số: nguyên hết → int; có phần lẻ (tin nhiều ngành) → 1 chữ số thập phân, làm tròn theo phần
+    dư lớn nhất để TỔNG vẫn đúng (3 × 1/3 → 0,4 + 0,3 + 0,3 = 1, không phải 0,9)."""
+    if ((values.round(6) % 1) == 0).all():
+        return values.round().astype(int)
+    tenths = values.to_numpy(dtype=float) * 10
+    floor = np.floor(tenths + 1e-9)
+    short = int(round(tenths.sum() - floor.sum()))
+    floor[np.argsort(-(tenths - floor), kind="stable")[:short]] += 1
+    return pd.Series(floor / 10, index=values.index)
 
 
 def _starts_month(start: pd.Timestamp) -> bool:
-    """Thu thập bắt đầu ngày `start` có phủ trọn tháng đó không (dung sai 1 ngày như `load_unique`)."""
-    return (start - pd.Timedelta(days=1)).day == 1 or start.day == 1
+    """Thu thập bắt đầu ngày `start` có coi là phủ trọn tháng đó không: bắt đầu trong 3 ngày đầu tháng (tin đăng ngày
+    1–2 vẫn thấy được nhờ dung sai 1 ngày của `load_unique` + tin còn hạn). Ngày 4 trở đi → tháng thiếu một phần."""
+    return start.day <= 3
+
+
+def _source_starts(df: pd.DataFrame) -> list[pd.Timestamp]:
+    """Ngày bắt đầu thu thập của từng nguồn có trong `df`."""
+    if "collection_start" not in df:
+        return []
+    return [pd.Timestamp(t) for t in df["collection_start"].dropna().unique()]
+
+
+def _partial_months(df: pd.DataFrame) -> set[pd.Period]:
+    """Tháng có nguồn bắt đầu thu thập giữa chừng (tháng đó nguồn ấy chỉ có một phần)."""
+    return {t.to_period("M") for t in _source_starts(df) if not _starts_month(t)}
 
 
 def monthly(df: pd.DataFrame, end_month: date, months: int = 6) -> pd.DataFrame:
@@ -340,18 +373,18 @@ def monthly(df: pd.DataFrame, end_month: date, months: int = 6) -> pd.DataFrame:
     thu thập giữa chừng chỉ có một phần → MoM của nó và của tháng kế tiếp để trống."""
     end = pd.Period(end_month, "M")
     periods = pd.period_range(end=end, periods=months, freq="M")
-    first_full = None
-    if "collection_start" in df and df["collection_start"].notna().any():
-        start = pd.Timestamp(df["collection_start"].min())
-        start_month = start.to_period("M")
+    starts = _source_starts(df)
+    if starts:
+        start_month = min(starts).to_period("M")
         periods = periods[periods >= start_month] if start_month <= end else periods[:0]
-        first_full = start_month if _starts_month(start) else start_month + 1
     month = df["event_date"].dt.to_period("M")
     table = pd.crosstab(month, df["source"]).reindex(periods, fill_value=0).astype(int)
     table.insert(0, "total", table.sum(axis=1).astype(int))
     table["mom"] = table["total"].pct_change().replace([float("inf")], pd.NA)
-    if first_full is not None:
-        table.loc[table.index <= first_full, "mom"] = pd.NA
+    # MoM trống: tháng đầu tiên, tháng có nguồn bắt đầu giữa chừng và tháng ngay sau (so với tháng thiếu một phần)
+    if starts:
+        blank = {min(starts).to_period("M")} | {m + i for m in _partial_months(df) for i in (0, 1)}
+        table.loc[table.index.isin(list(blank)), "mom"] = pd.NA
     table.index = table.index.astype(str)
     return table.rename_axis("month").reset_index()
 
@@ -433,14 +466,10 @@ def trend_label(recent: float, prev: float, min_vol: int, threshold: float) -> s
 def months_of_data(df: pd.DataFrame) -> int:
     """Số tháng TRỌN có dữ liệu liên tục tính tới tháng gần nhất (điều kiện mở màn Xu hướng: ≥ 6).
 
-    Tháng bắt đầu thu thập giữa chừng không tính (chỉ có một phần tháng)."""
+    Tháng có nguồn bắt đầu thu thập giữa chừng không tính (phạm vi thu thập tháng đó không trọn)."""
     if df.empty:
         return 0
-    present = set(df["event_date"].dt.to_period("M").dropna())
-    if "collection_start" in df and df["collection_start"].notna().any():
-        start = pd.Timestamp(df["collection_start"].min())
-        if not _starts_month(start):
-            present.discard(start.to_period("M"))
+    present = set(df["event_date"].dt.to_period("M").dropna()) - _partial_months(df)
     if not present:  # mọi tin chưa rõ ngày đăng (tin tồn sẵn, bộ ảnh chụp)
         return 0
     month, count = max(present), 0
@@ -453,8 +482,7 @@ def quality(conn: sqlite3.Connection, include_total: bool = False) -> pd.DataFra
     """Q01–Q02 theo nguồn: tổng bản ghi, tin duy nhất, % reject, % phủ từng trường, % có lương số."""
     if include_total:
         per_source = quality(conn)
-        total = _quality_totals(conn)
-        return pd.concat([per_source, total], ignore_index=True)
+        return pd.concat([per_source, _quality_totals(per_source)], ignore_index=True)
     totals = pd.read_sql_query(
         "SELECT source, COUNT(*) AS records, SUM(dq_status = 'reject') AS rejected FROM job_posts GROUP BY source",
         conn,
@@ -472,18 +500,16 @@ def quality(conn: sqlite3.Connection, include_total: bool = False) -> pd.DataFra
     return out
 
 
-def _quality_totals(conn: sqlite3.Connection) -> pd.DataFrame:
-    row = conn.execute(
-        """SELECT (SELECT COUNT(*) FROM job_posts), (SELECT SUM(dq_status = 'reject') FROM job_posts),
-                  COUNT(*), AVG(province_code IS NOT NULL), AVG(industry_code IS NOT NULL),
-                  AVG(occupation_code IS NOT NULL), AVG(experience_code IS NOT NULL), AVG(salary_mid IS NOT NULL)
-           FROM v_jobs_unique"""
-    ).fetchone()
-    cols = ["records", "rejected", "unique_jobs", "pct_location", "pct_industry", "pct_occupation",
-            "pct_experience", "pct_salary"]  # fmt: skip
-    out = pd.DataFrame([dict(zip(cols, row, strict=True))]).assign(source="(Tất cả)")
-    out["pct_reject"] = out["rejected"] / out["records"] if row[0] else None
-    return out
+def _quality_totals(per_source: pd.DataFrame) -> pd.DataFrame:
+    """Dòng "(Tất cả)" gộp từ bảng theo nguồn (không đọc lại v_jobs_unique): % phủ = TB có trọng số tin duy nhất."""
+    unique = per_source["unique_jobs"].fillna(0)
+    n = unique.sum()
+    row = {"source": "(Tất cả)", "records": per_source["records"].sum(), "rejected": per_source["rejected"].sum(),
+           "unique_jobs": n}  # fmt: skip
+    for col in ("pct_location", "pct_industry", "pct_occupation", "pct_experience", "pct_salary"):
+        row[col] = (per_source[col].fillna(0) * unique).sum() / n if n else None
+    row["pct_reject"] = row["rejected"] / row["records"] if row["records"] else None
+    return pd.DataFrame([row])
 
 
 LABEL_FLAGS = {"location_unmapped", "experience_unparsed"}

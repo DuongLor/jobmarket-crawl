@@ -23,7 +23,7 @@ c.page_header(ctx, "07", "Chất lượng dữ liệu & ánh xạ nhãn",
 if not c.empty_state(ctx):
     q = stats.quality(ctx.conn, include_total=True)
     total = q.set_index("source").loc["(Tất cả)"]
-    pending = labels.table(ctx.conn, status="unmapped")
+    pending = ctx.conn.execute("SELECT COUNT(*) FROM labels WHERE status = 'unmapped'").fetchone()[0]
     st.caption("Trang quản trị tính trên **toàn bộ DB, mọi nguồn** — không theo bộ dữ liệu/bộ lọc ở thanh bên.")
     rejected = int(total["rejected"] or 0)
     cols = st.columns(5)
@@ -31,7 +31,7 @@ if not c.empty_state(ctx):
     cols[1].metric("Tin duy nhất", c.fmt_int(total["unique_jobs"]))
     cols[2].metric("Reject", c.fmt_int(rejected))
     cols[3].metric("Bản ghi trùng", c.fmt_int(total["records"] - total["unique_jobs"] - rejected))
-    cols[4].metric("Nhãn chờ ánh xạ", c.fmt_int(len(pending)))
+    cols[4].metric("Nhãn chờ ánh xạ", c.fmt_int(pending))
 
     tab_cov, tab_queue, tab_log = st.tabs(["Chỉ số chất lượng", "Hàng chờ ánh xạ", "Nhật ký thay đổi"])
 
@@ -41,9 +41,13 @@ if not c.empty_state(ctx):
         checks = {"pct_reject": ("≤", th["max_reject"]), "pct_location": ("≥", th["min_location"]),
                   "pct_industry": ("≥", th["min_industry"]), "pct_occupation": ("≥", th["min_occupation"]),
                   "pct_experience": ("≥", th["min_experience"])}  # fmt: skip
+        # Trường KHÔNG nguồn nào cung cấp (0% trên toàn DB, vd nghề) → không chấm: "Chưa đạt" ở mọi nguồn chỉ là nhiễu,
+        # che các lỗi thật. Vẫn hiện cột độ phủ.
+        not_provided = [k for k in checks if k != "pct_reject" and not (total[k] or 0)]
+        checks_scored = {k: v for k, v in checks.items() if k not in not_provided}
 
         def verdict(row) -> str:
-            fails = [k for k, (op, v) in checks.items()
+            fails = [k for k, (op, v) in checks_scored.items()
                      if pd.notna(row[k]) and ((row[k] > v) if op == "≤" else (row[k] < v))]  # fmt: skip
             return "Đạt" if not fails else "Chưa đạt: " + ", ".join(k.removeprefix("pct_") for k in fails)
 
@@ -54,6 +58,13 @@ if not c.empty_state(ctx):
                  "pct_salary": "% có lương số (theo dõi)", "verdict": "Đánh giá",
                  **{k: f"% {k.removeprefix('pct_')} {op} {v * 100:.0f}%" for k, (op, v) in checks.items()}}  # fmt: skip
         st.dataframe(view[list(names)].rename(columns=names), hide_index=True, width="stretch")
+        if not_provided:
+            fields = ", ".join(k.removeprefix("pct_") for k in not_provided)
+            note = f"Không chấm (chưa nguồn nào cung cấp): {fields}."
+            if "pct_occupation" in not_provided:
+                note += (" Danh mục nghề chuẩn hiện là bộ mẫu 27 nghề — không suy nghề từ tiêu đề vì tỷ trọng sẽ chỉ "
+                         "phản ánh các nghề có trong danh sách mẫu.")  # fmt: skip
+            st.caption(note)
         c.csv_button(q, "chat_luong_theo_nguon", "csv_quality")
 
         left, right = st.columns(2)

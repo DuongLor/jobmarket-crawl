@@ -316,9 +316,10 @@ def test_second_run_starts_from_listings_not_crawled_last_time(tmp_cfg):  # noqa
     assert "https://www.careerlink.vn/viec-lam/ngan-hang/5" in crawled
 
 
-def _deep_site(last: int, empty_from: int | None = None):
+def _deep_site(last: int, empty_from: int | None = None, content_of: dict[int, int] | None = None):
     """Danh sách chung `last` trang, mỗi trang 6 tin KHÁC NHAU (mã tin gắn số trang); `empty_from` = giả lập bị
-    hạn chế ngầm từ trang đó (trả trang rỗng dù chưa tới trang cuối)."""
+    hạn chế ngầm từ trang đó (trả trang rỗng dù chưa tới trang cuối); `content_of` {trang: trang nguồn} = trang hiện
+    tin của trang khác (giả lập tin được làm mới nhảy lên đầu danh sách; sửa dict giữa các lần chạy)."""
     import re
 
     calls = []
@@ -330,7 +331,8 @@ def _deep_site(last: int, empty_from: int | None = None):
         calls.append(page)
         if page > last or (empty_from and page >= empty_from):
             return httpx.Response(200, text=EMPTY)
-        html = re.sub(r"/(\d{7})\"", lambda m: f'/{page:03d}{m.group(1)}"', CL_HTML)
+        src = (content_of or {}).get(page, page)
+        html = re.sub(r"/(\d{7})\"", lambda m: f'/{src:03d}{m.group(1)}"', CL_HTML)
         return httpx.Response(200, text=html.replace("<ul>", f'<a href="/vieclam/list?page={last}">{last}</a><ul>', 1))
 
     return handler, calls
@@ -381,6 +383,32 @@ def test_deep_crawl_wraps_around_at_end_of_list(tmp_cfg):  # noqa: F811
     handler, calls = _deep_site(last=4)
     run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=2)
     assert calls == [1, 2, 3, 4] and _resume(conn) is None  # đã đọc tới trang cuối 4 → hết vòng, không tải trang 5
+
+
+def test_refreshed_jobs_above_sweep_cursor_are_read_again(tmp_cfg):  # noqa: F811
+    """Hồi quy M4 (2026-11-05): tin cũ ở trang sâu được làm mới → nhảy lên đầu danh sách (trang 1–5). Chúng đã có
+    trong DB nên trang không có "tin mới"; nếu phần đầu dừng sau 3 trang như vậy thì tin ở trang 4–5 không được thấy
+    lại trong vòng quét hiện tại → bị đánh hết hạn nhầm khi vòng kết thúc."""
+    cfg = _deep_cfg(tmp_cfg, deep=3)
+    conn = init_db(cfg.path("db_file"))
+    refreshed = {1: 20, 2: 21, 3: 22, 4: 23, 5: 24}
+    shown: dict[int, int] = dict(refreshed)
+    handler, calls = _deep_site(last=30, content_of=shown)
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=5)  # đưa tin trang 20–24 vào DB
+    with conn:  # ...như thể thấy ở vòng quét TRƯỚC; bắt đầu vòng mới
+        conn.execute("UPDATE job_posts SET last_seen_at = '2026-01-01T00:00:00'")
+        conn.execute("DELETE FROM crawl_listings")
+    shown.clear()
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=10)  # vòng mới: trang 1–10 + sâu
+    shown.update(refreshed)
+    calls.clear()
+    run_paged(conn, cfg, make_client(cfg, handler), _main_only(), max_pages=10)
+    assert calls[:8] == [1, 2, 3, 4, 5, 6, 7, 8], calls  # trang 1–5 có tin chưa thấy trong vòng → đọc tiếp
+    stale = conn.execute(
+        "SELECT COUNT(*) FROM job_posts WHERE substr(source_job_id, 1, 3) IN ('023', '024') "
+        "AND last_seen_at < '2026-02-01'"
+    ).fetchone()[0]
+    assert stale == 0  # tin làm mới ở trang 4–5 đã được thấy lại trong vòng này
 
 
 def test_empty_page_without_known_last_page_does_not_close_sweep(tmp_cfg):  # noqa: F811

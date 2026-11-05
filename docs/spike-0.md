@@ -208,3 +208,37 @@ Hệ quả cho PLAN: mỗi nguồn là 1 adapter (`html_listing`, `api`, `datase
     `../`); `start` không sập khi bước tự nạp lỗi; `run` bỏ qua nguồn đã chạy < 3,5 giờ (`--force` để ép).
 - **Còn mở**: nghề (occupation) 0% mọi nguồn; kinh nghiệm CareerLink/CareerViet gần 0% (chỉ có ở trang chi tiết —
   CareerLink giới hạn, CareerViet robots cấm); CareerLink vẫn hay bị challenge ngay trang 2 dù cách 4 giờ.
+
+## Lượt 9 — rà soát lại bằng 3 agent (2026-11-05)
+
+- **Hiệu năng**: màn Chất lượng 28–36 s → ~4,5 s (lần đầu, gồm tải dữ liệu). Nguyên nhân: đếm số tin mỗi nhãn quét lại
+  toàn bảng `job_posts` cho từng nhãn → migration 008 thêm index các cột `*_label_id` + `(status, source)`; thẻ "Nhãn
+  chờ ánh xạ" chỉ đếm `COUNT(*)`; dòng "(Tất cả)" gộp từ bảng theo nguồn thay vì đọc lại `v_jobs_unique`.
+- **Đúng/sai**: file TopCV lưu tay cũ không làm sống lại tin đã hết hạn, trang chi tiết cũ không ghi đè hạn nộp mới;
+  "đã quét trọn" chỉ tính danh sách gốc (`start_url`), không phải danh mục nhỏ bất kỳ; MoM để trống ở tháng có nguồn
+  bắt đầu thu thập giữa chừng (từ ngày 4) và tháng kế tiếp; số đếm chia đều làm tròn giữ đúng tổng (0,4+0,3+0,3 = 1).
+- **Tầng request**: robots.txt có BOM UTF-8 trước đây bị bỏ qua toàn bộ; robots.txt trả 429 = cấm hết; Retry-After âm/
+  NaN/ngày giờ không làm sập; 503 ở lần thử cuối = bị chặn; chuyển hướng sang giao thức khác http(s) thì dừng.
+- **Dữ liệu cá nhân**: thêm tổng đài 1900/1800 và key `hotline`/`fax`.
+- **Quét sâu**: phần đầu danh sách trước đây dừng sau 3 trang "không có tin mới" → tin cũ vừa được làm mới (nhảy từ
+  dưới con trỏ quét sâu lên đầu) không được thấy lại trong vòng → bị đánh hết hạn nhầm cuối vòng. Nay trang chỉ là
+  "đã biết" khi MỌI tin đã thấy trong vòng quét hiện tại. Đổi lại: đầu mỗi vòng mới (~5 ngày/lần) phần đầu đọc đủ
+  `max_pages` (10 trang) thay vì ~3–4; vẫn trong `max_requests`.
+- **CSV** thiếu `first_seen_at`: lấy ngày đăng làm ngày thấy (trước đây = giờ nạp → mọi tin thành tin tồn sẵn).
+- **Lương**: lương đại diện > 150 triệu/tháng (`[stats] max_monthly_salary`; vd "500 triệu", thường nhập sai hoặc lương
+  năm) không vào thống kê lương — 11 tin trên DB thật (khoảng rộng đã bị `max_range_ratio` loại phần lớn); TB lương bộ
+  lịch sử 15,42 → 15,30 triệu. `raw.save` trả mã băm của file trên đĩa khi file đã có (trước đây của bản mới không ghi).
+- **Không sửa (có lý do)**: mã tin CareerViet viết hoa là số hex (`35B09EDD`) → khác hoa/thường vẫn là cùng tin, không
+  có va chạm thật; `dq_status` cũ sau khi ánh xạ lại chỉ ảnh hưởng dòng `status` của CLI (thống kê lọc `reject`, bảng
+  cờ dashboard tính lại theo nhãn hiện tại).
+- **Ánh xạ ngành CSKH**: "Dịch vụ khách hàng"/"Chăm sóc khách hàng" (184 tin: tổng đài, telesales, nhắc phí, QHKH ngân
+  hàng; rất ít lễ tân/nhà hàng) IND10 → **IND03 Kinh doanh – Bán hàng**, khớp `seeds/occupations.csv` (OCC09 thuộc
+  IND03). "Thực phẩm – Đồ uống" giữ IND02 (2 tin, đều sản xuất/R&D). `remap` nay áp lại cả nhãn do quy tắc ánh xạ
+  (`mapped_via = 'rule'`), không đụng nhãn sửa tay. Đã chạy trên DB thật: 3 nhãn; tỷ trọng Kinh doanh 14,4% → 16,9%,
+  Dịch vụ – NH – KS 4,7% → 2,0%.
+- **Nghề — quyết định không suy từ tiêu đề**: danh mục nghề chuẩn chỉ là bộ mẫu 27 nghề (2–3/ngành); suy theo từ khoá
+  sẽ để phần lớn tin "chưa phân loại" và tỷ trọng chỉ phản ánh các nghề trong danh sách mẫu. Dashboard đã ẩn chiều
+  nghề khi độ phủ thấp; màn Chất lượng không chấm tiêu chí mà chưa nguồn nào cung cấp (trước đây mọi nguồn "Chưa đạt:
+  occupation", che lỗi thật). Làm nghề cần trước hết một danh mục nghề đầy đủ.
+- **Còn mở**: tin trên con trỏ quét sâu hết hạn hàng loạt (> `deep_overlap_pages` trang giữa 2 lần chạy) vẫn có thể làm
+  tin dịch lên vùng đã đọc → hết hạn nhầm, tự hồi phục khi thấy lại ở vòng sau.

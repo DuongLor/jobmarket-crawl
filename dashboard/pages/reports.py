@@ -26,7 +26,8 @@ def show(payload: dict) -> None:
     money = ind["name"].str.contains("Lương trung vị")
     ratio = ind["name"].str.contains("Tỷ lệ")
     for col in ("current", "previous"):
-        ind[col] = [c.fmt_million(v) if m else c.fmt_pct(v) if r else v
+        # Cả cột là chuỗi (lẫn chuỗi + số làm Arrow báo lỗi chuyển kiểu)
+        ind[col] = [c.fmt_million(v) if m else c.fmt_pct(v) if r else "—" if pd.isna(v) else c.fmt_int(v)
                     for v, m, r in zip(ind[col], money, ratio, strict=True)]  # fmt: skip
     ind["change"] = [c.fmt_delta(v) for v in ind["change"]]
     st.dataframe(ind.rename(columns={"name": "Chỉ số", "current": "Kỳ này", "previous": "Kỳ trước",

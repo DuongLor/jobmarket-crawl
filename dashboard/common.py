@@ -1,7 +1,7 @@
 """Phần dùng chung của dashboard: kết nối DB, bộ lọc chung, định dạng, chân trang (PLAN §B6, BR-09)."""
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -61,11 +61,15 @@ DATA_VERSION_SQL = """SELECT (SELECT MAX(id) FROM job_posts), (SELECT MAX(last_s
 
 
 @st.cache_data(show_spinner="Đang nạp dữ liệu…", max_entries=4)
-def _load_unique_cached(db_file: str, version: tuple, max_range_ratio: float, backlog_grace_days: int) -> pd.DataFrame:
+def _load_unique_cached(db_file: str, version: tuple, params: tuple[float, int, float]) -> pd.DataFrame:
     """Nạp lại chỉ khi dữ liệu đổi: tin mới/thấy lại, tin hết hạn, đổi ánh xạ (luôn ghi label_history),
     thêm tên chuẩn — hoặc khi đổi tham số hiệu chỉnh trong config."""
+    max_range_ratio, backlog_grace_days, max_monthly_salary = params
     return stats.load_unique(
-        init_db(Path(db_file)), max_range_ratio=max_range_ratio, backlog_grace_days=backlog_grace_days
+        init_db(Path(db_file)),
+        max_range_ratio=max_range_ratio,
+        backlog_grace_days=backlog_grace_days,
+        max_monthly_salary=max_monthly_salary,
     )
 
 
@@ -91,8 +95,11 @@ def load_context() -> Context:
     everything = _load_unique_cached(
         str(cfg.path("db_file")),
         version,
-        float(cfg.stats.get("max_range_ratio", stats.MAX_RANGE_RATIO)),
-        int(cfg.stats.get("backlog_grace_days", stats.BACKLOG_GRACE_DAYS)),
+        (
+            float(cfg.stats.get("max_range_ratio", stats.MAX_RANGE_RATIO)),
+            int(cfg.stats.get("backlog_grace_days", stats.BACKLOG_GRACE_DAYS)),
+            float(cfg.stats.get("max_monthly_salary", stats.MAX_MONTHLY_SALARY)),
+        ),
     )
     datasets = available_datasets(everything["source"].unique()) if not everything.empty else ["current"]
     dataset = st.session_state.get("f_dataset", datasets[0])
@@ -102,12 +109,17 @@ def load_context() -> Context:
     df_all = dataset_scope(everything, dataset)
     seen = pd.to_datetime(df_all["last_seen_at"], errors="coerce").max() if not df_all.empty else None
     as_of = seen.date() if seen is not None and not pd.isna(seen) else stats.as_of_date(conn)
-    masters = {
+    filters = current_filters(as_of, historical=dataset == "history")
+    masters = load_masters(conn)
+    return Context(cfg, conn, df_all, stats.apply_filters(df_all, filters), as_of, filters, masters, dataset)
+
+
+def load_masters(conn) -> dict[str, dict[str, str]]:
+    """Danh mục chuẩn từng chiều {mã: tên}, theo thứ tự chuẩn."""
+    return {
         dim: dict(conn.execute(f"SELECT code, name FROM {table} ORDER BY {order or 'rowid'}").fetchall())
         for dim, (_, table, order) in stats.DIMENSIONS.items()
     }
-    filters = current_filters(as_of, historical=dataset == "history")
-    return Context(cfg, conn, df_all, stats.apply_filters(df_all, filters), as_of, filters, masters, dataset)
 
 
 def seen_days(ctx: "Context") -> int:
@@ -187,6 +199,7 @@ def page_header(ctx: Context, code: str, title: str, subtitle: str) -> None:
     if not ctx.historical and len(ctx.df):
         unknown = int((~ctx.df["date_known"]).sum())
         wide = int((ctx.df["salary_excluded"] == "wide_range").sum())
+        high = int((ctx.df["salary_excluded"] == "too_high").sum())
         notes = []
         if unknown:
             notes.append(
@@ -198,6 +211,12 @@ def page_header(ctx: Context, code: str, title: str, subtitle: str) -> None:
             notes.append(
                 f"**{fmt_int(wide)} tin** có khoảng lương rộng bất thường (vd lương cứng + hoa hồng) "
                 "không đưa vào thống kê lương."
+            )
+        if high:
+            ceiling = float(ctx.cfg.stats.get("max_monthly_salary", stats.MAX_MONTHLY_SALARY)) / 1e6
+            notes.append(
+                f"**{fmt_int(high)} tin** có lương trên {fmt_int(ceiling)} "
+                "triệu/tháng (thường nhập sai hoặc ghi lương năm) không đưa vào thống kê lương."
             )
         if notes:
             st.caption(" · ".join(notes))
@@ -291,8 +310,6 @@ def hidden_by_period(ctx: Context) -> int:
     """Số tin khớp các bộ lọc khác nhưng bị loại chỉ vì khoảng thời gian."""
     if ctx.filters.date_from is None or ctx.df_all.empty:
         return 0
-    from dataclasses import replace
-
     unbounded = stats.apply_filters(ctx.df_all, replace(ctx.filters, date_from=None, date_to=None))
     return max(0, len(unbounded) - len(ctx.df))
 
@@ -391,7 +408,8 @@ def method_dialog() -> None:
   thu thập nguồn → vẫn tính vào phân bố ngành/địa phương/lương, **không** tính là tin mới / theo tháng / xu hướng.
   Xu hướng chỉ tính tháng thu thập trọn (tháng bắt đầu giữa chừng không tính).
 - **Khoảng lương rộng bất thường** (đầu trên > 5 lần đầu dưới, kiểu "lương cứng + hoa hồng lên tới") → không đưa
-  vào trung bình/trung vị (ngưỡng `max_range_ratio`).
+  vào trung bình/trung vị (ngưỡng `max_range_ratio`). Lương đại diện trên 150 triệu/tháng (thường nhập sai hoặc
+  ghi lương năm) cũng không đưa vào (ngưỡng `max_monthly_salary`).
 - **Công ty**: gộp tên chỉ khác cách viết loại hình (CP = Cổ phần = JSC); khác loại hình (TNHH ≠ CP) không gộp.
 - **Hai bộ dữ liệu** (crawl hằng ngày / ảnh chụp VietJobs 2025) xem riêng, không cộng gộp.
 - **TopCV** chỉ lấy từ trang danh sách (mẫu, không phải toàn bộ thị trường): không có cấp bậc, hạn nộp, mô tả.

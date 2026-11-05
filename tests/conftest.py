@@ -1,3 +1,4 @@
+import dataclasses
 from pathlib import Path
 
 import pytest
@@ -13,9 +14,20 @@ def _no_db_override(monkeypatch):
     monkeypatch.delenv("JOBMARKET_DB", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_real_mysql(monkeypatch):
+    """Test không bao giờ ghi vào MySQL thật của người dùng (test riêng tự giả lập kết nối)."""
+
+    def refuse(_cfg):
+        raise AssertionError("test không được kết nối MySQL thật")
+
+    monkeypatch.setattr("jobmarket.mysql_mirror.connect", refuse)
+
+
 @pytest.fixture
 def cfg():
-    return load_config()
+    c = load_config()
+    return dataclasses.replace(c, raw={**c.raw, "mysql": {**c.raw.get("mysql", {}), "enabled": False}})
 
 
 @pytest.fixture

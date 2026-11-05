@@ -177,16 +177,25 @@ def save_job(
         # Hạn nộp lấy giá trị MỚI nhất nguồn hiển thị (nhà tuyển dụng gia hạn → không bị coi là đã đóng); file lưu
         # tay cũ hơn lần thấy cuối thì không ghi đè hạn nộp.
         # Tin bị đánh dấu hết hạn (vì không thấy) mà nay xuất hiện lại trên danh sách → còn tuyển, trừ khi hạn nộp
-        # đã qua.
+        # đã qua. Chỉ khi lần thấy này MỚI hơn lần thấy cuối (file lưu tay cũ không làm sống lại tin đã đóng).
         fresh = now >= (existing["last_seen_at"] or "")
-        deadline = job.deadline if fresh and job.deadline else None
         conn.execute(
-            "UPDATE job_posts SET first_seen_at = MIN(first_seen_at, ?), last_seen_at = MAX(last_seen_at, ?), "
-            "last_run_id = ?, industry_label_id = ?, posted_date = COALESCE(posted_date, ?), "
-            "deadline = COALESCE(?, deadline), "
-            "status = CASE WHEN status = 'expired' AND (COALESCE(?, deadline) IS NULL OR COALESCE(?, deadline) >= ?) "
-            "THEN 'unknown' ELSE status END WHERE id = ?",
-            (now, now, run_id, industry, job.posted_date, deadline, deadline, deadline, now[:10], existing["id"]),
+            "UPDATE job_posts SET first_seen_at = MIN(first_seen_at, :now), last_seen_at = MAX(last_seen_at, :now), "
+            "last_run_id = :run, industry_label_id = :industry, posted_date = COALESCE(posted_date, :posted), "
+            "deadline = COALESCE(:deadline, deadline), "
+            "status = CASE WHEN :fresh AND status = 'expired' "
+            "AND (COALESCE(:deadline, deadline) IS NULL OR COALESCE(:deadline, deadline) >= :today) "
+            "THEN 'unknown' ELSE status END WHERE id = :id",
+            {
+                "now": now,
+                "run": run_id,
+                "industry": industry,
+                "posted": job.posted_date,
+                "deadline": job.deadline if fresh else None,
+                "fresh": fresh,
+                "today": now[:10],
+                "id": existing["id"],
+            },
         )
         stats.posts_updated += 1
         return
@@ -268,6 +277,21 @@ def save_job(
     stats.posts_new += 1
     if dq_status == "reject":
         stats.posts_rejected += 1
+
+
+def _has_unseen_since(conn: sqlite3.Connection, source: str, jobs: list[RawJob], since: str) -> bool:
+    """Trong `jobs` có tin chưa có trong DB hoặc lần thấy cuối trước mốc `since` (đọc TRƯỚC khi lưu trang này)."""
+    ids = [j.source_job_id for j in jobs if j.source_job_id]
+    if not ids:
+        return False
+    seen = dict(
+        conn.execute(
+            f"SELECT source_job_id, last_seen_at FROM job_posts WHERE source = ? AND source_job_id IN "
+            f"({','.join('?' * len(ids))})",
+            (source, *ids),
+        )
+    )
+    return any(seen.get(i) is None or seen[i] < since for i in ids)
 
 
 def _industry_label_ids(conn: sqlite3.Connection, source: str, names: list[str]) -> list[int]:
@@ -468,14 +492,23 @@ def run_paged(
                 (adapter.NAME,),
             )
         )
+        sweep_started = dict(
+            conn.execute(
+                "SELECT url, sweep_started_at FROM crawl_listings WHERE source = ? AND sweep_started_at IS NOT NULL",
+                (adapter.NAME,),
+            )
+        )
         deep_pages = int(source_cfg.get("deep_pages_per_run", 0))
         overlap = int(source_cfg.get("deep_overlap_pages", 0))
         index = 0
         empty_first_pages = 0
         last_page: dict[str, int] = {}  # số trang cuối thấy trên thanh phân trang của từng danh sách
 
-        def visit(listing, page: int) -> str:
-            """Đọc 1 trang danh sách → 'useful' | 'known' | 'empty' | 'error'."""
+        def visit(listing, page: int, sweep_since: str | None = None) -> str:
+            """Đọc 1 trang danh sách → 'useful' | 'known' | 'empty' | 'error'.
+
+            `sweep_since` (nguồn quét sâu): trang còn tin CHƯA thấy từ lúc bắt đầu vòng quét hiện tại cũng là 'useful'.
+            """
             nonlocal empty_first_pages
             url = adapter.page_url(listing.url, page)
             if url == start_url and page == 1:
@@ -510,6 +543,7 @@ def run_paged(
                 return "empty"
             empty_first_pages = 0
             before = (stats.posts_new, stats.industry_filled)
+            unseen = sweep_since is not None and _has_unseen_since(conn, adapter.NAME, jobs, sweep_since)
             with conn:
                 for job in jobs:
                     save_job(conn, cfg, adapter.NAME, adapter.PROVIDES, job, run_id, stats)
@@ -520,8 +554,8 @@ def run_paged(
                         (adapter.NAME, listing.url, listing.industry_label, now_iso()),
                     )
             pages_done.append(url)
-            # Trang "có ích" = có tin mới HOẶC gắn được ngành cho tin đã có
-            return "useful" if (stats.posts_new, stats.industry_filled) != before else "known"
+            # Trang "có ích" = có tin mới, gắn được ngành cho tin đã có, hoặc có tin chưa thấy trong vòng quét này
+            return "useful" if unseen or (stats.posts_new, stats.industry_filled) != before else "known"
 
         def save_resume(listing, page: int | None) -> None:
             with conn:
@@ -535,8 +569,13 @@ def run_paged(
             index += 1
             # 1) Đầu danh sách (tin mới nhất): dừng khi hết tin, đủ `max_pages`, hoặc vài trang liền không có ích
             known_streak, read_until, ended = 0, 0, False
+            # Nguồn quét sâu: chỉ dừng phần đầu khi gặp vài trang liền mà MỌI tin đã thấy trong vòng quét hiện tại.
+            # Dừng theo "không có tin mới" thì tin cũ vừa được làm mới (nhảy từ dưới con trỏ quét sâu lên đầu danh
+            # sách) không được đọc lại trong vòng này → bị đánh hết hạn nhầm cuối vòng (review 2026-11-05, M4).
+            # Vòng mới (chưa có mốc) → mốc = lúc bắt đầu lần chạy: phần đầu danh sách đọc tới `max_pages`.
+            sweep_since = sweep_started.get(listing.url, run_started) if deep_pages > 0 else None
             for page in range(1, limit + 1):
-                result = visit(listing, page)
+                result = visit(listing, page, sweep_since)
                 if result in ("empty", "error"):
                     ended = result == "empty"
                     break
@@ -639,11 +678,12 @@ def run_paged(
     return run_id
 
 
-def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail: dict) -> None:
+def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail: dict, stale: bool = False) -> None:
     """Ghi dữ liệu trang chi tiết (JSON-LD JobPosting) vào tin `row` (cần id, dq_flags, industry_label_id).
 
     Dùng chung cho trang chi tiết crawl tự động (CareerLink) và trang chi tiết bạn tự lưu (TopCV, import-html):
     ngành (mục chính), kinh nghiệm, ngày đăng gốc, hạn nộp → trạng thái, loại hình, mô tả.
+    `stale`: trang lưu tay CŨ hơn lần thấy cuối → không ghi đè hạn nộp/trạng thái mới hơn (chỉ điền khi còn trống).
     """
     flags = [f for f in (row["dq_flags"] or "").split(",") if f and f != "experience_unparsed"]
     experience_label = label_id(conn, "experience", source, detail["experience"])
@@ -660,7 +700,9 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
             """UPDATE job_posts SET
                    industry_label_id = COALESCE(?, industry_label_id),
                    experience_label_id = COALESCE(?, experience_label_id),
-                   posted_date = COALESCE(?, posted_date), deadline = COALESCE(?, deadline), status = ?,
+                   posted_date = COALESCE(?, posted_date),
+                   deadline = CASE WHEN ? THEN COALESCE(deadline, ?) ELSE COALESCE(?, deadline) END,
+                   status = CASE WHEN ? THEN status ELSE ? END,
                    employment_type = ?, description_text = COALESCE(?, description_text), dq_flags = ?,
                    dq_status = CASE WHEN dq_status = 'reject' THEN 'reject' WHEN ? = '' THEN 'ok' ELSE 'warn' END,
                    detail_fetched_at = ?
@@ -671,7 +713,10 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
                 ),
                 experience_label,
                 detail["posted_date"],
+                stale,
                 deadline,
+                deadline,
+                stale,
                 status,
                 detail["employment_type"],
                 detail["description_text"],
@@ -921,6 +966,9 @@ def _import_one_saved_page(conn: sqlite3.Connection, cfg: Config, path: Path, ru
         if not job.source_job_id:
             stats.errors.append(f"{path.name}: trang chi tiết không xác định được mã tin")
             return False
+        before = conn.execute(
+            "SELECT last_seen_at FROM job_posts WHERE source = 'topcv' AND source_job_id = ?", (job.source_job_id,)
+        ).fetchone()
         with conn:
             save_job(conn, cfg, "topcv", topcv.PROVIDES_DETAIL, job, run_id, stats, seen_at=seen_at)
         row = conn.execute(
@@ -929,7 +977,7 @@ def _import_one_saved_page(conn: sqlite3.Connection, cfg: Config, path: Path, ru
         ).fetchone()
         if row is None:  # tin bị loại khi lưu (vd mã tin không hợp lệ) — đã ghi lỗi
             return False
-        apply_detail(conn, cfg, "topcv", row, detail)
+        apply_detail(conn, cfg, "topcv", row, detail, stale=bool(before and seen_at < before[0]))
     else:
         stats.errors.append(f"{path.name}: không phải trang danh sách hay trang chi tiết tin TopCV")
         return False

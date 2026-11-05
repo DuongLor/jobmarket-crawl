@@ -35,7 +35,7 @@ python -m venv .venv
 .venv/Scripts/python -m jobmarket import-html       # nạp trang TopCV bạn tự lưu vào data/inbox/topcv/
 .venv/Scripts/python -m jobmarket import-csv <file> # nạp CSV tin đã làm sạch (định dạng tab Data_Jobs)
 .venv/Scripts/python -m jobmarket import-vietjobs   # nạp bộ lịch sử VietJobs (48.092 dòng → 34.151 tin sau bỏ trùng, 07–10/2025)
-.venv/Scripts/python -m jobmarket remap             # áp lại quy tắc (vd sau khi thêm quận/huyện, tên ngành vào seeds)
+.venv/Scripts/python -m jobmarket remap             # áp lại quy tắc sau khi sửa seeds (nhãn tự động đi theo seeds; nhãn sửa tay giữ nguyên)
 .venv/Scripts/python -m jobmarket backfill --source careerviet  # tính lại từ bản gốc (không mạng): ngày đăng, ngành chi tiết, mục ngành
 .venv/Scripts/python -m jobmarket renormalize       # tính lại lương (mọi nguồn) từ chuỗi gốc sau khi đổi ngưỡng/quy tắc (không mạng)
 .venv/Scripts/python scripts/scrub_raw.py [--apply] # quét lại PII trong bản gốc đã lưu (chạy thử, rồi --apply)
@@ -44,6 +44,9 @@ python -m venv .venv
 .venv/Scripts/python -m jobmarket watch             # chỉ tự nạp trang TopCV bạn lưu (không request mạng)
 .venv/Scripts/python -m jobmarket report 2026-11 [--publish]  # báo cáo tháng; --publish chốt + Excel vào data/reports/
 .venv/Scripts/python -m jobmarket summary           # tóm tắt nhanh dữ liệu
+.venv/Scripts/python -m jobmarket health            # chuỗi ngày liên tục có dữ liệu theo nguồn (mốc ≥ 7 ngày), lần chạy kẹt
+.venv/Scripts/python -m jobmarket mysql-sync        # chép DB sang MySQL schema `jobmarket` để xem bằng Workbench (tự chạy sau run/start nếu [mysql] enabled)
+.venv/Scripts/python -m jobmarket audit             # 30 tin ngẫu nhiên/nguồn → data/audit/*.xlsx để đối chiếu trang thật; --score <file> chấm
 .venv/Scripts/python -m jobmarket dashboard         # mở dashboard http://127.0.0.1:8501 (chỉ máy này, dữ liệu thật)
 .venv/Scripts/python -m jobmarket demo              # tạo data/demo.db từ 374 tin mẫu của mockup
 .venv/Scripts/python -m jobmarket dashboard --demo  # dashboard trên dữ liệu mẫu (không đụng DB thật)

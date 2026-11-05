@@ -104,6 +104,8 @@ window_days = 30
 active_seen_days = 0
 # Khoảng lương rộng hơn N lần (vd 10–200 triệu "lương cứng + hoa hồng") → không vào thống kê lương; 0 = tắt
 max_range_ratio = 5
+# Lương đại diện > N VND/tháng (vd "500 triệu" — nhập sai hoặc lương năm) → không vào thống kê lương; 0 = tắt
+max_monthly_salary = 150000000
 # Tin chưa có ngày đăng mà thấy lần đầu trong N ngày đầu tiên thu thập nguồn = tồn sẵn → không tính là tin mới
 backlog_grace_days = 0
 
@@ -117,3 +119,13 @@ min_experience = 0.90
 # Huy hiệu độ tin cậy (PLAN §B6): Cao nếu n ≥ high_n và mọi chỉ số phủ đạt; Vừa nếu n ≥ mid_n; còn lại Thấp
 confidence_high_n = 30
 confidence_mid_n = 10
+
+[mysql]
+# Bản sao để xem bằng MySQL Workbench — DB chính vẫn là SQLite (paths.db_file). enabled = true: tự đồng bộ sau mỗi
+# lần `run`/`start` crawl xong; tắt thì vẫn chạy tay được `jobmarket mysql-sync`. Mỗi lần đồng bộ dựng lại toàn bộ
+# bảng trong schema → đừng sửa dữ liệu ở MySQL. Mật khẩu: biến môi trường JOBMARKET_MYSQL_PASSWORD (mặc định rỗng).
+enabled = true
+host = "127.0.0.1"
+port = 3306
+user = "root"
+database = "jobmarket"

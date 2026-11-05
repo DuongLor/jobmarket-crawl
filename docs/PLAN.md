@@ -1,5 +1,7 @@
 # Plan — Dự án độc lập `jobmarket-crawl/`: Crawl & thống kê thị trường tuyển dụng (dùng cá nhân để tham khảo, theo dõi)
 
+> **2026-11-05:** yêu cầu mới [`task/ycau.md`](../../task/ycau.md) (mốc 20/11 · 26/11 · 30/11) → xem [`plan-v3-ycau.md`](./plan-v3-ycau.md); vẫn dùng cá nhân.
+>
 > **Cập nhật 2026-11-04:** đã code Bước 1–5. Nguồn thực tế khác plan: crawl CareerLink / Việc Làm 24h / CareerViet (TopCV chặn bot → chỉ nạp trang tự lưu; VietnamWorks chưa làm; VietJobs là dữ liệu lịch sử) — xem `docs/spike-0.md` lượt 4–8 và README. Khi plan và code/README lệch nhau: **code > README / spike-0 > plan**.
 >
 > **Trạng thái:** plan v2 · 2026-11-03 · **Đã chốt: chỉ dùng cá nhân** (1 người dùng, chạy máy cá nhân, không chia sẻ/công khai dữ liệu). Q1–Q7 tạm theo cột "Đề xuất" ở B11 cho tới khi user đổi.

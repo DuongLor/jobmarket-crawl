@@ -11,7 +11,7 @@ from pathlib import Path
 
 import typer
 
-from jobmarket import labels, report
+from jobmarket import audit, health, labels, mysql_mirror, report
 from jobmarket.config import DB_ENV, PROJECT_ROOT, load_config
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
 from jobmarket.pipeline import (
@@ -88,7 +88,8 @@ def run(
         raise typer.BadParameter(f"Nguồn {source} đang tắt trong config.toml")
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
-    failed = False
+    health.close_stale_runs(conn, older_than_minutes=STALE_RUN_MINUTES)
+    failed = crawled = False
     for name in names:
         due, next_at = _crawl_due(conn, name, min_hours)
         if not (due or force):
@@ -98,6 +99,9 @@ def run(
         client = _client_for(cfg, name)
         try:
             run_id = run_source(conn, cfg, client, name, max_pages)
+        except KeyboardInterrupt:
+            health.close_stale_runs(conn, source=name)
+            raise
         finally:
             client.close()
         row = dict(conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone())
@@ -105,6 +109,9 @@ def run(
                 "errors_count", "error_sample")  # fmt: skip
         typer.echo(json.dumps({k: row[k] for k in keys} | {"requests_made": client.requests_made}, ensure_ascii=False))
         failed |= row["status"] == "failed"
+        crawled = True
+    if crawled:
+        _mirror_mysql(cfg, conn, typer.echo)
     if failed:
         raise typer.Exit(code=1)
 
@@ -186,9 +193,34 @@ def watch(
         typer.echo("Đã dừng theo dõi.")
 
 
+def _mirror_mysql(cfg, conn, say) -> None:
+    """Đồng bộ sang MySQL nếu bật `[mysql] enabled`; lỗi chỉ báo, không làm hỏng lần crawl (SQLite đã lưu xong)."""
+    if not cfg.raw.get("mysql", {}).get("enabled"):
+        return
+    try:
+        result = mysql_mirror.sync(conn, cfg.raw["mysql"])
+    except Exception as exc:
+        say(f"MySQL: đồng bộ lỗi {type(exc).__name__}: {exc} (dữ liệu vẫn ở SQLite; chạy lại `mysql-sync`)")
+        return
+    say(f"MySQL: đã đồng bộ {sum(result['tables'].values())} dòng vào schema {result['database']} "
+        f"({result['seconds']} giây)")  # fmt: skip
+
+
+# Lần chạy 'running' bắt đầu trước N phút = tiến trình đã chết (một lần chạy thật ≤ ~15 phút)
+STALE_RUN_MINUTES = 120
+
+
 def _crawl_due(conn, name: str, hours: float) -> tuple[bool, str | None]:
-    """Đến giờ crawl nguồn chưa: lần chạy gần nhất (kể cả lỗi/bị chặn, ghi trong DB) cách hiện tại ≥ `hours` giờ."""
-    last = conn.execute("SELECT MAX(started_at) FROM runs WHERE source = ?", (name,)).fetchone()[0]
+    """Đến giờ crawl nguồn chưa: lần chạy gần nhất (kể cả lỗi/bị chặn, ghi trong DB) cách hiện tại ≥ `hours` giờ.
+
+    Lần chạy bị ngắt mà chưa lưu được tin nào không tính (gần như chưa gửi request); bị ngắt sau khi đã lưu tin thì vẫn
+    tính — đã tốn request, giữ khoảng cách với nguồn (CareerLink hạn chế theo số request trong vài giờ).
+    """
+    last = conn.execute(
+        "SELECT MAX(started_at) FROM runs WHERE source = ? "
+        "AND NOT (status = 'interrupted' AND posts_new + posts_updated = 0)",
+        (name,),
+    ).fetchone()[0]
     if not last:
         return True, None
     next_at = datetime.fromisoformat(last) + timedelta(hours=hours)
@@ -210,6 +242,8 @@ def start(
     cfg = load_config()
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
+    if closed := health.close_stale_runs(conn, older_than_minutes=STALE_RUN_MINUTES):
+        typer.echo(f"Đã đóng {closed} lần chạy bị ngắt từ trước (trạng thái 'interrupted').")
     log_dir = cfg.path("data_dir") / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -245,6 +279,7 @@ def start(
             except Exception as exc:  # lỗi tự nạp không làm tắt dashboard + crawl
                 say(f"TopCV: lỗi tự nạp {type(exc).__name__}: {exc}")
                 run_id = None
+            sync_needed = run_id is not None
             if run_id is not None:
                 row = conn.execute("SELECT posts_new, posts_updated, error_sample FROM runs WHERE id = ?", (run_id,))
                 new, updated, errors = row.fetchone()
@@ -263,9 +298,15 @@ def start(
                 extra = f" + {detail} trang chi tiết" if detail else ""
                 pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
                 say(f"{name}: bắt đầu crawl (≤ {budget} request danh sách{extra}, ~{pace} giây/request)…")
+                sync_needed = True
                 client = _client_for(cfg, name)
                 try:
-                    run_id = run_source(conn, cfg, client, name, None)
+                    try:
+                        run_id = run_source(conn, cfg, client, name, None)
+                    except KeyboardInterrupt:
+                        health.close_stale_runs(conn, source=name)
+                        say(f"{name}: dừng giữa chừng — lần chạy ghi là 'interrupted', tin đã lưu vẫn giữ")
+                        raise
                     r = conn.execute("SELECT status, posts_new, posts_updated, error_sample FROM runs WHERE id = ?",
                                      (run_id,)).fetchone()  # fmt: skip
                     say(f"{name}: {r['status']} · {r['posts_new']} tin mới · {r['posts_updated']} cập nhật · "
@@ -274,12 +315,96 @@ def start(
                     say(f"{name}: lỗi {type(exc).__name__}: {exc}")
                 finally:
                     client.close()
+            if sync_needed:
+                _mirror_mysql(cfg, conn, say)
             time.sleep(10)
     except KeyboardInterrupt:
         say("Đang dừng…")
     finally:
         dashboard.terminate()
         say("Đã dừng dashboard, tự nạp và crawl.")
+
+
+@app.command("mysql-sync")
+def mysql_sync() -> None:
+    """Chép toàn bộ DB SQLite sang MySQL (`[mysql]` trong config.toml) để xem bằng Workbench. Không request mạng."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    result = mysql_mirror.sync(conn, cfg.raw.get("mysql", {}))
+    for table, n in result["tables"].items():
+        typer.echo(f"  {table:<22} {n:>8} dòng")
+    typer.echo(
+        f"Đã đồng bộ {len(result['tables'])} bảng vào MySQL schema {result['database']} ({result['seconds']} giây)"
+    )
+
+
+def _crawl_sources(cfg) -> list[str]:
+    """Nguồn crawl đang bật (TopCV chỉ nạp trang tự lưu → không tính)."""
+    return [n for n, s in cfg.raw["sources"].items() if s.get("enabled") and n != "topcv"]
+
+
+@app.command("audit")
+def audit_cmd(
+    sample: int = typer.Option(30, "--sample", help="Số tin ngẫu nhiên mỗi nguồn"),
+    source: str = typer.Option("all", help="Một nguồn, hoặc all = mọi nguồn crawl đang bật"),
+    seed: int = typer.Option(None, help="Seed chọn mẫu (bỏ trống = ngẫu nhiên, ghi vào tên file để chọn lại được)"),
+    score: Path = typer.Option(None, "--score", help="Chấm file đã đánh dấu (đường dẫn, hoặc tên trong data/audit)"),
+) -> None:
+    """Kiểm tra tay ngẫu nhiên: xuất data/audit/*.xlsx để so với trang thật; --score chấm, ghi docs/audit-log.md."""
+    cfg = load_config()
+    out_dir = cfg.path("data_dir") / "audit"
+    if score is not None:
+        path = score if score.exists() else out_dir / score.name
+        if not path.exists():
+            raise typer.BadParameter(f"Không thấy file {score}")
+        result = audit.score(path)
+        if not result["sources"]:
+            typer.echo("Chưa có ô nào được đánh dấu Đúng/Sai — chưa chấm.")
+            raise typer.Exit(code=1)
+        md = audit.log_markdown(result)
+        log = cfg.root / "docs" / "audit-log.md"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if not log.exists():
+            log.write_text("# Nhật ký kiểm tra tay (plan v3 §3.2 — mục tiêu ≥ 95% trường đúng mỗi nguồn)\n", "utf-8")
+        with log.open("a", encoding="utf-8") as f:
+            f.write("\n" + md)
+        typer.echo(md)
+        typer.echo(f"Đã ghi vào {log}")
+        return
+    names = _crawl_sources(cfg) if source == "all" else [source]
+    conn = init_db(cfg.path("db_file"))
+    path = audit.export(conn, names, sample, seed, out_dir)
+    typer.echo(f"Đã tạo {path}")
+    typer.echo("Mở file → bấm Link → so cột 'Sau chuẩn hoá' với trang thật → chọn Đúng / Sai / Bỏ qua (cột Đánh dấu).")
+    typer.echo(f"Xong thì chạy: .venv/Scripts/python -m jobmarket audit --score {path.name}")
+
+
+@app.command("health")
+def health_cmd(
+    min_sources: int = typer.Option(2, help="Số nguồn tối thiểu cùng có dữ liệu trong 1 ngày (nghiệm thu 1A)"),
+    target: int = typer.Option(7, help="Số ngày liên tục cần đạt"),
+) -> None:
+    """Sức khoẻ thu thập: chuỗi ngày liên tục có dữ liệu theo nguồn, lần chạy gần nhất, lỗi 24 giờ. Không request."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    closed = health.close_stale_runs(conn, older_than_minutes=STALE_RUN_MINUTES)
+    sources = _crawl_sources(cfg)
+    r = health.report(conn, sources, min_sources=min_sources)
+    if closed:
+        typer.echo(f"Đã đóng {closed} lần chạy kẹt → 'interrupted'.")
+    typer.echo(f"Hôm nay {r['today']} · đang chạy: {r['running_now']}")
+    for name, info in r["sources"].items():
+        last = info["last_run"]
+        last_txt = (
+            f"{last['started_at']} {last['status']} (+{last['new']} mới, {last['updated']} cập nhật)" if last else "—"
+        )
+        typer.echo(
+            f"  {name:<11} liên tục {info['streak_days']} ngày · tổng {info['data_days']} ngày có dữ liệu · "
+            f"lỗi 24h: {info['failed_24h']} · gần nhất: {last_txt}"
+        )
+    joint = r["joint_streak_days"]
+    verdict = "ĐẠT" if joint >= target else f"chưa đạt (còn {target - joint} ngày)"
+    typer.echo(f"Chuỗi ngày có ≥ {min_sources} nguồn cùng có dữ liệu: {joint}/{target} — {verdict}")
 
 
 @app.command("import-html")
@@ -318,11 +443,11 @@ def import_vietjobs_cmd(
 
 @app.command()
 def remap() -> None:
-    """Áp lại quy tắc cố định cho nhãn chưa ánh xạ (sau khi bổ sung seeds, vd quận/huyện → tỉnh)."""
+    """Áp lại quy tắc cố định sau khi sửa seeds: nhãn chưa ánh xạ + nhãn do quy tắc ánh xạ (không đụng nhãn sửa tay)."""
     conn = init_db(load_config().path("db_file"))
     changed = labels.remap_rules(conn)
     pending = conn.execute("SELECT COUNT(*) FROM labels WHERE status = 'unmapped'").fetchone()[0]
-    typer.echo(f"Đã ánh xạ thêm: {changed or 'không có'} · còn chờ ánh xạ: {pending} nhãn")
+    typer.echo(f"Đã đổi theo quy tắc: {changed or 'không có'} · còn chờ ánh xạ: {pending} nhãn")
 
 
 @app.command()

@@ -82,3 +82,20 @@ def test_active_job_not_seen_again_expires(tmp_cfg):  # noqa: F811
     conn.execute("UPDATE job_posts SET status = 'active'")
     assert mark_expired(conn, "src", before="2026-02-01T00:00:00") == 1
     assert conn.execute("SELECT status FROM job_posts").fetchone()[0] == "expired"
+
+
+def test_existing_file_is_kept_and_hash_matches_disk(tmp_path):
+    import hashlib
+
+    rel, first = raw.save(tmp_path, "careerviet", "35B09EDD", {"v": 1})
+    rel2, second = raw.save(tmp_path, "careerviet", "35B09EDD", {"v": 2})
+    on_disk = gzip.decompress((tmp_path / rel).read_bytes())
+    assert rel == rel2 and first == second == hashlib.sha256(on_disk).hexdigest()
+    assert raw.load(tmp_path, rel)["v"] == 1
+
+
+def test_corrupt_existing_file_is_rewritten(tmp_path):
+    rel, _ = raw.save(tmp_path, "careerviet", "35B09EDD", {"v": 1})
+    (tmp_path / rel).write_bytes(gzip.compress(b'{"v": 1}')[:10])  # gzip cắt cụt
+    raw.save(tmp_path, "careerviet", "35B09EDD", {"v": 2})
+    assert raw.load(tmp_path, rel)["v"] == 2

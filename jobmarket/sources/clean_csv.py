@@ -48,7 +48,10 @@ def import_clean_csv(conn: sqlite3.Connection, path: Path, run_source: str = "cs
                 ).fetchone()
             ):
                 continue
-            first_seen = _value(row, "first_seen_at") or now_iso()
+            # Thiếu first_seen_at mà có ngày đăng → coi như thấy ngày đăng. Dùng giờ nạp file thì mọi ngày đăng trong
+            # file đều "trước ngày bắt đầu thu thập" → bị coi là tin tồn sẵn, mất hết chỉ số theo thời gian.
+            posted = _value(row, "posted_date")
+            first_seen = _value(row, "first_seen_at") or (f"{posted[:10]}T00:00:00" if posted else now_iso())
             location = _value(row, "location")
             # Khoá trùng có sẵn trong file (README workbook: "nếu CSV có dedup_key thì dùng giá trị đó")
             key = _value(row, "dedup_key") or dedup_key(row.get("company_name"), row.get("title"), location)

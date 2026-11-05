@@ -36,7 +36,9 @@ class RobotsRules:
         self.groups: list[_Group] = []
         current: _Group | None = None
         last_was_agent = False
-        for raw in lines:
+        for index, raw in enumerate(lines):
+            if index == 0:
+                raw = raw.lstrip("\ufeff")  # BOM UTF-8 đầu file làm key đầu thành "\ufeffuser-agent" → mất cả nhóm
             line = raw.split("#", 1)[0].strip()
             if ":" not in line:
                 continue

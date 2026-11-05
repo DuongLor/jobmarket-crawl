@@ -11,6 +11,7 @@ dependencies = [
     "streamlit>=1.50",
     "plotly>=5.20",
     "openpyxl>=3.1",
+    "pymysql>=1.1",
 ]
 
 [project.optional-dependencies]

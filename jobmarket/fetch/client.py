@@ -4,7 +4,9 @@ Gặp trang chống bot (Cloudflare challenge…) → ném `Blocked` và dừng 
 KHÔNG thử vượt: không đổi User-Agent, không giải challenge, không dùng proxy.
 """
 
+import math
 import time
+from email.utils import parsedate_to_datetime
 from urllib.parse import urljoin, urlsplit
 
 import httpx
@@ -59,8 +61,9 @@ class PoliteClient:
             # RFC 9309: theo tối đa 5 lần chuyển hướng khi đọc robots.txt
             resp = self._client.get(f"{origin}/robots.txt", follow_redirects=True)
             self.requests_made += 1
-            # 4xx (không có robots.txt) = không hạn chế; 5xx (máy chủ lỗi) = coi như cấm hết
-            if resp.status_code >= 500:
+            # 4xx (không có robots.txt) = không hạn chế; 5xx (máy chủ lỗi) hoặc 429 (đang giới hạn tốc độ — crawler
+            # này dừng khi gặp 429) = coi như cấm hết
+            if resp.status_code >= 500 or resp.status_code == 429:
                 rules = RobotsRules(["User-agent: *", "Disallow: /"])
             else:
                 rules = RobotsRules(resp.text.splitlines() if resp.status_code == 200 else [])
@@ -81,15 +84,16 @@ class PoliteClient:
             # 429 = nguồn yêu cầu giảm tốc → dừng ngay (không thử lại trong cùng lần chạy)
             if resp.status_code in (403, 429):
                 raise Blocked(f"{resp.status_code} at {url}")
-            if resp.status_code == 503 and attempt < self.max_retries:
-                wait = _retry_after(resp) or self.min_delay * (2 ** (attempt + 1))
-                if wait > 300:  # nguồn báo nghỉ lâu → dừng, lần chạy sau thử lại
-                    raise Blocked(f"503 Retry-After {wait:.0f}s at {url}")
+            if resp.status_code == 503:
+                wait = _retry_after(resp)
+                wait = self.min_delay * (2 ** (attempt + 1)) if wait is None else wait
+                if wait > 300 or attempt >= self.max_retries:  # nghỉ lâu / hết lượt thử → dừng, lần chạy sau thử lại
+                    raise Blocked(f"503 at {url} (Retry-After {wait:.0f}s, lần thử {attempt + 1})")
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
             return body
-        raise Blocked(f"retries exhausted at {url}")
+        raise Blocked(f"retries exhausted at {url}")  # không tới được: vòng lặp luôn return/raise
 
     def _fetch_following_redirects(self, url: str) -> httpx.Response:
         current = url
@@ -101,15 +105,28 @@ class PoliteClient:
             if not (resp.is_redirect and location):
                 return resp
             current = urljoin(current, location)
+            if urlsplit(current).scheme not in ("http", "https"):
+                raise Blocked(f"chuyển hướng sang giao thức không hỗ trợ: {current[:80]}")
             self._check(current)  # đích chuyển hướng cũng phải được robots.txt cho phép
         raise Blocked(f"quá {MAX_REDIRECTS} lần chuyển hướng từ {url}")
 
 
 def _retry_after(resp: httpx.Response) -> float | None:
-    try:
-        return float(resp.headers.get("retry-after", ""))
-    except ValueError:
+    """Giây phải chờ theo Retry-After (số giây hoặc ngày giờ HTTP); không hợp lệ → None. Không bao giờ âm."""
+    value = resp.headers.get("retry-after", "").strip()
+    if not value:
         return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            moment = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if moment.tzinfo is None:
+            return None
+        seconds = moment.timestamp() - time.time()
+    return max(0.0, seconds) if math.isfinite(seconds) else None
 
 
 # Trang xác minh người dùng trả HTTP 200 (CareerLink, 2026-11-03: trang chi tiết hiện hộp "Xác nhận bạn không phải

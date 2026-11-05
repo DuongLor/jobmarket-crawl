@@ -21,11 +21,11 @@ Kế toán / Kiểm toán,IND04,CareerLink JSON-LD
 Vận chuyển / Giao thông / Kho bãi,IND06,CareerLink JSON-LD
 Xuất nhập khẩu / Ngoại thương,IND06,CareerLink JSON-LD
 Biên phiên dịch / Thông dịch viên,IND15,CareerLink JSON-LD
-Dịch vụ khách hàng,IND10,CareerLink JSON-LD — nhóm dịch vụ
+Dịch vụ khách hàng,IND03,CareerLink JSON-LD — CSKH/tổng đài/QHKH (đối chiếu tiêu đề 2026-11-05; seeds/occupations.csv xếp OCC09 vào IND03)
 Khác,,mục "Khác" không cho biết ngành → bỏ qua
 Kinh doanh/Bán hàng,IND03,TopCV danh mục cr1
 Marketing/PR/Quảng cáo,IND05,TopCV cr92
-Chăm sóc khách hàng (Customer Service)/Vận hành,IND10,TopCV cr158 — nhóm dịch vụ
+Chăm sóc khách hàng (Customer Service)/Vận hành,IND03,TopCV cr158 — CSKH/tổng đài/QHKH (đối chiếu tiêu đề 2026-11-05; seeds/occupations.csv xếp OCC09 vào IND03)
 Nhân sự/Hành chính/Pháp chế,IND11,TopCV cr177
 Tài chính/Ngân hàng/Bảo hiểm,IND04,TopCV cr206
 Bất động sản,IND09,TopCV cr333
@@ -62,7 +62,7 @@ Bảo hiểm,IND04,Việc Làm 24h nghề 23
 Thông tin - Truyền thông - Quảng cáo,IND05,Việc Làm 24h nghề 24
 Kiểm toán,IND04,Việc Làm 24h nghề 26
 Quản lý tiêu chuẩn và chất lượng,IND02,Việc Làm 24h nghề 28
-Chăm sóc khách hàng,IND10,Việc Làm 24h nghề 30 — nhóm dịch vụ
+Chăm sóc khách hàng,IND03,Việc Làm 24h nghề 30 — CSKH/tổng đài/QHKH (đối chiếu tiêu đề 2026-11-05; seeds/occupations.csv xếp OCC09 vào IND03)
 Nghề nghiệp khác,,Việc Làm 24h nghề 35 — không cho biết ngành → bỏ qua
 An toàn lao động,IND02,Việc Làm 24h nghề 36
 Bưu chính viễn thông,IND12,Việc Làm 24h nghề 38

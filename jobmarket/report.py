@@ -78,6 +78,7 @@ def build(conn: sqlite3.Connection, cfg: Config, period: str) -> dict:
         conn,
         max_range_ratio=float(cfg.stats.get("max_range_ratio", stats.MAX_RANGE_RATIO)),
         backlog_grace_days=int(cfg.stats.get("backlog_grace_days", stats.BACKLOG_GRACE_DAYS)),
+        max_monthly_salary=float(cfg.stats.get("max_monthly_salary", stats.MAX_MONTHLY_SALARY)),
     )
     df = df[df["event_date"] <= pd.Timestamp(end)]
     if _month_slice(df, period).empty:
