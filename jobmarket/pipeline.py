@@ -2,7 +2,7 @@
 
 import contextlib
 import json
-import re
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +16,7 @@ from jobmarket.dedup import dedup_key
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
 from jobmarket.normalize.experience import experience_code
 from jobmarket.normalize.level import level_from_title
-from jobmarket.normalize.location import split_location
+from jobmarket.normalize.location import province_candidates, split_location
 from jobmarket.normalize.salary import parse_salary
 from jobmarket.normalize.text import clean, norm_key
 from jobmarket.quality import assess
@@ -46,11 +46,8 @@ _MASTER_TABLES = {
 }
 
 
-def _exact_master_match(conn: sqlite3.Connection, label_type: str, raw: str) -> str | None:
-    """Nhãn trùng ĐÚNG tên chuẩn (sau chuẩn hoá chữ) → mã đó. So khớp chính xác, không phải đoán."""
-    table = _MASTER_TABLES.get(label_type)
-    if not table:
-        return None
+def _match_name(conn: sqlite3.Connection, table: str, raw: str | None) -> str | None:
+    """Nhãn trùng ĐÚNG tên chuẩn (sau chuẩn hoá chữ) trong bảng master → mã đó. So khớp chính xác, không phải đoán."""
     key = norm_key(raw)
     for row in conn.execute(f"SELECT code, name FROM {table}"):
         if norm_key(row["name"]) == key:
@@ -58,16 +55,21 @@ def _exact_master_match(conn: sqlite3.Connection, label_type: str, raw: str) -> 
     return None
 
 
+def _exact_master_match(conn: sqlite3.Connection, label_type: str, raw: str) -> str | None:
+    table = _MASTER_TABLES.get(label_type)
+    return _match_name(conn, table, raw) if table else None
+
+
+# Tiến độ crawl (từng trang): CLI `run`/`start` gắn handler in ra màn hình; mặc định im lặng (test, thư viện)
+progress = logging.getLogger("jobmarket.progress")
+
 IGNORE = "__ignore__"  # quy tắc nói nhãn này không phải giá trị của chiều (vd ngành "Tiếng Nhật")
 
 
 def _rule_mapping(conn: sqlite3.Connection, label_type: str, raw: str) -> str | None:
     """Ánh xạ bằng quy tắc cố định khi nhãn mới xuất hiện. Không có quy tắc → None (chưa ánh xạ); IGNORE → bỏ qua."""
     if label_type == "location":
-        key = norm_key(raw)
-        # "tp vinh" / "thành phố nha trang" / "huyện củ chi" → thử thêm bản bỏ tiền tố hành chính
-        stripped = re.sub(r"^(tp|thanh pho|tx|thi xa|huyen|tinh)\s+", "", key)
-        for candidate in dict.fromkeys((key, stripped)):
+        for candidate in province_candidates(raw):
             row = conn.execute(
                 "SELECT province_code FROM province_aliases WHERE alias_norm = ?", (candidate,)
             ).fetchone()
@@ -82,6 +84,11 @@ def _rule_mapping(conn: sqlite3.Connection, label_type: str, raw: str) -> str | 
         ).fetchone()
         if row:
             return row["industry_code"] or IGNORE
+        # Nhãn là một danh mục đã biết (hoặc tên khác của nó) → nhóm của danh mục
+        category = category_code(conn, raw)
+        if category:
+            group = conn.execute("SELECT industry_code FROM master_categories WHERE code = ?", (category,)).fetchone()
+            return group["industry_code"] if group else None
         return None
     row = conn.execute(
         "SELECT code FROM label_aliases WHERE label_type = ? AND alias_norm = ?", (label_type, norm_key(raw))
@@ -118,7 +125,93 @@ def label_id(conn: sqlite3.Connection, label_type: str, source: str, raw: str | 
             "VALUES (?, ?, NULL, ?, ?, 'rule')",
             (cur.lastrowid, now_iso(), master or status, "quy tắc cố định khi nhãn xuất hiện lần đầu"),
         )
+    if label_type == "industry":
+        assign_category(conn, cur.lastrowid)
     return cur.lastrowid
+
+
+# Nguồn mà danh mục ngành CHÍNH LÀ chuẩn danh mục (phân loại giống CareerLink): danh mục mới gặp → tự thêm
+CATEGORY_SOURCE = "careerlink"
+
+
+def category_code(conn: sqlite3.Connection, raw: str | None) -> str | None:
+    """Danh mục (kiểu CareerLink) của một nhãn ngành: trùng tên danh mục, hoặc tên khác trong category_aliases."""
+    key = norm_key(raw)
+    if not key:
+        return None
+    row = conn.execute("SELECT category_code FROM category_aliases WHERE alias_norm = ?", (key,)).fetchone()
+    return row["category_code"] if row else _match_name(conn, "master_categories", raw)
+
+
+def assign_category(conn: sqlite3.Connection, label: int) -> bool:
+    """Gán danh mục cho nhãn ngành; nhãn của CareerLink chưa có danh mục → thêm danh mục mới đúng tên CareerLink.
+
+    Không gán cho nhãn bỏ qua ("Tiếng Nhật", "Khác") hay nhãn ghép nhiều mục ("A, B"). Danh mục chưa có nhóm mà nhãn
+    đã ánh xạ nhóm → danh mục nhận nhóm đó. True nếu đổi gì."""
+    row = conn.execute(
+        "SELECT source, raw_label, status, master_code, category_code FROM labels "
+        "WHERE id = ? AND label_type = 'industry'",
+        (label,),
+    ).fetchone()
+    if not row or row["status"] == "ignored" or "," in (row["raw_label"] or ""):
+        return False
+    code = category_code(conn, row["raw_label"])
+    if code is None and row["source"] == CATEGORY_SOURCE:
+        number = conn.execute("SELECT COUNT(*) FROM master_categories").fetchone()[0] + 1
+        while conn.execute("SELECT 1 FROM master_categories WHERE code = ?", (f"CAT{number:02d}",)).fetchone():
+            number += 1
+        code = f"CAT{number:02d}"
+        order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM master_categories").fetchone()[0]
+        conn.execute(
+            "INSERT INTO master_categories (code, name, industry_code, sort_order) VALUES (?, ?, ?, ?)",
+            (code, row["raw_label"], row["master_code"] if row["status"] == "mapped" else None, order),
+        )
+    changed = code != row["category_code"]
+    if changed:
+        conn.execute("UPDATE labels SET category_code = ? WHERE id = ?", (code, label))
+    if code and row["status"] == "mapped":
+        conn.execute(
+            "UPDATE master_categories SET industry_code = ? WHERE code = ? AND industry_code IS NULL",
+            (row["master_code"], code),
+        )
+    return changed
+
+
+def assign_categories(conn: sqlite3.Connection) -> int:
+    """Gán lại danh mục cho mọi nhãn ngành (sau khi sửa seeds/categories.csv, category_aliases.csv). Không request."""
+    with conn:
+        ids = [r[0] for r in conn.execute("SELECT id FROM labels WHERE label_type = 'industry' ORDER BY id")]
+        return sum(assign_category(conn, i) for i in ids)
+
+
+def _location_ids(conn: sqlite3.Connection, source: str, location) -> list[int]:
+    if not location:
+        return []
+    return list(dict.fromkeys(i for i in (label_id(conn, "location", source, p) for p in location.parts) if i))
+
+
+def _store_positions(conn: sqlite3.Connection, table: str, job_id: int, ids: list[int]) -> None:
+    """Thay danh sách nhãn có thứ tự của tin (bảng `table`: job_locations / job_industry_labels). Rỗng → giữ nguyên."""
+    if not ids:
+        return
+    conn.execute(f"DELETE FROM {table} WHERE job_id = ?", (job_id,))
+    conn.executemany(
+        f"INSERT INTO {table} (job_id, position, label_id) VALUES (?, ?, ?)",
+        [(job_id, pos, lid) for pos, lid in enumerate(ids)],
+    )
+
+
+def store_locations(conn: sqlite3.Connection, job_id: int, ids: list[int]) -> None:
+    """Mọi nơi làm việc của tin (theo thứ tự nguồn) → job_locations; thống kê theo tỉnh đếm tin ở MỖI nơi."""
+    _store_positions(conn, "job_locations", job_id, ids)
+
+
+def set_locations(conn: sqlite3.Connection, job_id: int, source: str, raw: str | None) -> list[int]:
+    """Chuỗi địa điểm gốc → job_locations + job_posts.location_raw (một chỗ duy nhất ghi cả hai). Trả nhãn đã ghi."""
+    ids = _location_ids(conn, source, split_location(raw))
+    store_locations(conn, job_id, ids)
+    conn.execute("UPDATE job_posts SET location_raw = ? WHERE id = ?", (clean(raw) or None, job_id))
+    return ids
 
 
 def company_id(conn: sqlite3.Connection, source: str, name: str | None) -> int | None:
@@ -151,7 +244,8 @@ def save_job(
         return
     existing = (
         conn.execute(
-            "SELECT id, industry_label_id, last_seen_at FROM job_posts WHERE source = ? AND source_job_id = ?",
+            "SELECT id, industry_label_id, last_seen_at, location_raw FROM job_posts "
+            "WHERE source = ? AND source_job_id = ?",
             (source, job.source_job_id),
         ).fetchone()
         if job.source_job_id
@@ -163,10 +257,15 @@ def save_job(
         candidate = label_id(conn, "industry", source, job.industry_label)
         # Nhãn hiện tại đã xác định KHÔNG phải ngành (ignored, vd "Tiếng Nhật") → thay bằng ngành thật khi tin xuất
         # hiện ở trang ngành. Nhãn ngành thật mà chưa ánh xạ thì giữ (ánh xạ sau là có số), không ghi đè tuỳ tiện.
+        filled = False
         if candidate and candidate != industry and _is_ignored(conn, industry) and _is_mapped(conn, candidate):
             industry = candidate
-            stats.industry_filled += 1
+            filled = True
         industry = industry or candidate
+        # Thêm mục ngành mới cho tin đã có cũng là "có ích" → quét danh mục không dừng sớm ở trang toàn tin đã biết
+        if not job.industry_labels and _add_industry_label(conn, existing["id"], candidate):
+            filled = True
+        stats.industry_filled += filled
         if job.industry_labels:
             ids = _industry_label_ids(conn, source, job.industry_labels)
             _store_industry_labels(conn, existing["id"], ids)
@@ -179,6 +278,9 @@ def save_job(
         # Tin bị đánh dấu hết hạn (vì không thấy) mà nay xuất hiện lại trên danh sách → còn tuyển, trừ khi hạn nộp
         # đã qua. Chỉ khi lần thấy này MỚI hơn lần thấy cuối (file lưu tay cũ không làm sống lại tin đã đóng).
         fresh = now >= (existing["last_seen_at"] or "")
+        # Nơi làm việc theo lần thấy mới nhất; chuỗi không đổi → nhãn không đổi (đa số tin gặp lại), bỏ qua ghi
+        if fresh and job.location_raw and clean(job.location_raw) != existing["location_raw"]:
+            set_locations(conn, existing["id"], source, job.location_raw)
         conn.execute(
             "UPDATE job_posts SET first_seen_at = MIN(first_seen_at, :now), last_seen_at = MAX(last_seen_at, :now), "
             "last_run_id = :run, industry_label_id = :industry, posted_date = COALESCE(posted_date, :posted), "
@@ -234,9 +336,9 @@ def save_job(
             location_label_id, location_count, experience_label_id, level_label_id, level_from_title,
             skills_raw, salary_raw, salary_type, salary_from, salary_to, salary_currency, salary_tax,
             posted_date, deadline, status, description_text, raw_path, raw_sha256, dq_status, dq_flags,
-            dedup_key, first_seen_at, last_seen_at, first_run_id, last_run_id, normalizer_version
+            dedup_key, first_seen_at, last_seen_at, first_run_id, last_run_id, normalizer_version, location_raw
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?)""",
+                  ?, ?, ?)""",
         (
             source,
             job.source_job_id,
@@ -271,9 +373,13 @@ def save_job(
             run_id,
             run_id,
             NORMALIZER_VERSION,
+            clean(job.location_raw) or None,
         ),
     )
+    store_locations(conn, cur.lastrowid, _location_ids(conn, source, location))
     _store_industry_labels(conn, cur.lastrowid, industry_ids)
+    if not industry_ids:  # `industry` khi đó chính là nhãn ngành đơn của tin
+        _add_industry_label(conn, cur.lastrowid, industry)
     stats.posts_new += 1
     if dq_status == "reject":
         stats.posts_rejected += 1
@@ -299,20 +405,112 @@ def _industry_label_ids(conn: sqlite3.Connection, source: str, names: list[str])
 
 
 def _primary_industry(conn: sqlite3.Connection, ids: list[int]) -> int | None:
-    """Ngành chính của tin nhiều mục: mục đầu ĐÃ ánh xạ; chưa mục nào ánh xạ → mục đầu không bị bỏ qua."""
+    """Nhãn ngành ĐẠI DIỆN (để lọc/hiển thị) của tin nhiều mục: mục đầu đã ánh xạ; chưa mục nào ánh xạ → mục đầu
+    không bị bỏ qua. Không phải "ngành chính": CareerLink xếp mục theo MÃ danh mục tăng dần (kiểm 8/8 tin, 2026-11-09),
+    nguồn không cho biết mục chính → thống kê chia đều tin cho mọi mục (stats.allocate)."""
     return next((i for i in ids if _is_mapped(conn, i)), None) or next(
         (i for i in ids if not _is_ignored(conn, i)), None
     )
 
 
-def _store_industry_labels(conn: sqlite3.Connection, job_id: int, ids: list[int]) -> None:
-    if not ids:
-        return
-    conn.execute("DELETE FROM job_industry_labels WHERE job_id = ?", (job_id,))
-    conn.executemany(
-        "INSERT INTO job_industry_labels (job_id, position, label_id) VALUES (?, ?, ?)",
-        [(job_id, pos, lid) for pos, lid in enumerate(ids)],
+def _add_industry_label(conn: sqlite3.Connection, job_id: int, label: int | None) -> bool:
+    """Ghi thêm 1 mục ngành cho tin (tin gặp ở trang danh mục đó) nếu chưa có; bỏ qua nhãn không phải ngành.
+
+    Trang danh mục là bằng chứng tin THUỘC danh mục → duyệt nhiều danh mục tích luỹ đủ mục ngành của tin mà không cần
+    trang chi tiết (1 request ra ngành cho ~50 tin). True nếu vừa thêm."""
+    if label is None or _is_ignored(conn, label):
+        return False
+    rows = conn.execute("SELECT position, label_id FROM job_industry_labels WHERE job_id = ?", (job_id,)).fetchall()
+    if any(r["label_id"] == label for r in rows):
+        return False
+    position = max((r["position"] for r in rows), default=-1) + 1
+    conn.execute(
+        "INSERT INTO job_industry_labels (job_id, position, label_id) VALUES (?, ?, ?)", (job_id, position, label)
     )
+    return True
+
+
+def backfill_listing_industries(conn: sqlite3.Connection, cfg: Config, source: str) -> dict[str, int]:
+    """Mục ngành từ trang danh mục lưu trong thẻ tin gốc (`listing_industry`) → job_industry_labels. Không request."""
+    raw_dir = cfg.path("raw_dir")
+    added = 0
+    rows = conn.execute("SELECT id, raw_path, industry_label_id FROM job_posts WHERE source = ?", (source,)).fetchall()
+    with conn:
+        for row in rows:
+            # Nhãn ngành đang gắn cũng là bằng chứng: thẻ tin lưu ở lần gặp ĐẦU (thường danh sách chung, không ngành),
+            # ngành đến từ lần gặp sau ở trang danh mục.
+            added += _add_industry_label(conn, row["id"], row["industry_label_id"])
+            if not row["raw_path"]:
+                continue
+            try:
+                name = raw_store.load(raw_dir, row["raw_path"]).get("listing_industry")
+            except (OSError, ValueError):
+                continue
+            if name:
+                added += _add_industry_label(conn, row["id"], label_id(conn, "industry", source, name))
+    return {"memberships_added": added}
+
+
+def _vieclam24h_province_names(conn: sqlite3.Connection, items: dict[int, dict]) -> dict:
+    """Bản gốc Việc Làm 24h giữ MÃ tỉnh (`province_ids`), tên nằm ở bảng tra của trang (không lưu) → học mã → tên từ
+    các tin chỉ có 1 tỉnh (tên = nhãn địa điểm đã lưu của tin đó). `items`: mã tin → `item` của bản gốc."""
+    names: dict = {}
+    for job_id, label in conn.execute(
+        "SELECT p.id, l.raw_label FROM job_posts p JOIN labels l ON l.id = p.location_label_id "
+        "WHERE p.source = 'vieclam24h' AND p.location_count = 1"
+    ):
+        ids = (items.get(job_id) or {}).get("province_ids") or []
+        if len(ids) == 1:
+            names.setdefault(ids[0], label)
+    return names
+
+
+def backfill_locations(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
+    """Mọi nơi làm việc (job_locations) + chuỗi gốc (location_raw) cho tin đã có, từ bản gốc đã lưu. Không request.
+
+    CareerLink/CareerViet/TopCV: đọc lại thẻ tin; Việc Làm 24h: mã tỉnh trong `item`; VietJobs: dòng của file dataset
+    (data/datasets/vietjobs/VietJobs.csv). Không đọc được → giữ nơi đầu tiên đã lưu."""
+    from jobmarket.sources import careerlink, careerviet, topcv, vietjobs
+
+    raw_dir = cfg.path("raw_dir")
+    cards = {"careerlink": careerlink, "careerviet": careerviet, "topcv": topcv}
+    dataset = cfg.path("data_dir") / "datasets" / "vietjobs" / "VietJobs.csv"
+    vj = vietjobs.locations_by_id(dataset) if dataset.exists() else {}
+    rows = conn.execute("SELECT id, source, source_job_id, raw_path, location_label_id FROM job_posts").fetchall()
+    v24_items: dict[int, dict] = {}
+    for row in rows:
+        if row["source"] == "vieclam24h" and row["raw_path"]:
+            with contextlib.suppress(OSError, ValueError):
+                v24_items[row["id"]] = raw_store.load(raw_dir, row["raw_path"]).get("item") or {}
+    v24 = _vieclam24h_province_names(conn, v24_items)
+    counts = {"jobs": 0, "multi": 0, "from_raw": 0}
+    with conn:
+        for row in rows:
+            raw = None
+            try:
+                if row["source"] in cards and row["raw_path"]:
+                    html = raw_store.load(raw_dir, row["raw_path"]).get("listing_card_html")
+                    parsed = cards[row["source"]].parse_listing(html, None) if html else []
+                    raw = parsed[0].location_raw if parsed else None
+                elif row["id"] in v24_items:
+                    province_ids = v24_items[row["id"]].get("province_ids") or []
+                    raw = ", ".join(n for n in (v24.get(p) for p in province_ids) if n) or None
+                elif row["source"] == "vietjobs":
+                    raw = vj.get(row["source_job_id"])
+            except (OSError, ValueError):
+                raw = None
+            ids = set_locations(conn, row["id"], row["source"], raw) if raw else []
+            counts["from_raw"] += bool(raw)
+            if not ids and row["location_label_id"]:
+                ids = [row["location_label_id"]]
+                store_locations(conn, row["id"], ids)
+            counts["jobs"] += bool(ids)
+            counts["multi"] += len(ids) > 1
+    return counts
+
+
+def _store_industry_labels(conn: sqlite3.Connection, job_id: int, ids: list[int]) -> None:
+    _store_positions(conn, "job_industry_labels", job_id, ids)
 
 
 def backfill_industry_labels(conn: sqlite3.Connection, cfg: Config, source: str) -> dict[str, int]:
@@ -345,9 +543,10 @@ def _is_mapped(conn: sqlite3.Connection, label: int | None) -> bool:
 
 
 def choose_industry(conn: sqlite3.Connection, source: str, names: list[str | None], current: int | None) -> int | None:
-    """Nhãn ngành cho tin từ danh sách mục ngành của trang chi tiết (mục đầu = chức năng chính).
+    """Nhãn ngành đại diện cho tin từ danh sách mục ngành của trang chi tiết (CareerLink: xếp theo mã danh mục, không
+    có mục chính — xem `_primary_industry`; thống kê dùng đủ các mục).
 
-    Lấy mục chính (mục đầu không bị bỏ qua, vd bỏ "Khác"). Mục chính đã ánh xạ → dùng. Chưa ánh xạ mà tin đã có ngành
+    Lấy mục đầu không bị bỏ qua (vd bỏ "Khác"). Mục đó đã ánh xạ → dùng. Chưa ánh xạ mà tin đã có ngành
     chuẩn (từ trang danh mục) → giữ ngành đó, không thay bằng nhãn chưa ánh xạ; tin chưa có ngành → nhận mục chính
     (vào hàng chờ duyệt, ánh xạ xong là có số).
     """
@@ -418,6 +617,7 @@ def run_topcv(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, max_p
         pages_done.append(start_url)
     except (Blocked, Disallowed) as exc:
         stats.blocked = f"{type(exc).__name__}: {exc}"
+        progress.warning("Dừng nguồn (không vượt chặn): %s", stats.blocked)
     except Exception as exc:  # mất mạng, lỗi HTTP ở trang đầu…: ghi nhận, không để run kẹt ở 'running'
         stats.errors.append(f"{type(exc).__name__}: {exc}")
 
@@ -476,16 +676,27 @@ def run_paged(
         last_crawled = dict(
             conn.execute("SELECT url, last_crawled_at FROM crawl_listings WHERE source = ?", (adapter.NAME,))
         )
-        queue = adapter.listings(start_url, start_html)
-        queued = {item.url for item in queue}
+        key = getattr(adapter, "listing_key", lambda url: url)
+        queue, queued = [], set()
+        for item in adapter.listings(start_url, start_html):  # giữ thứ tự adapter: danh sách chung đầu tiên
+            if key(item.url) not in queued:
+                queued.add(key(item.url))
+                queue.append(item)
         # Danh mục đã biết từ các lần trước (kể cả phát hiện trên trang chi tiết) — trang chủ chỉ liên kết vài danh mục
         known = [
             ListingPage(url, label)
             for url, label in conn.execute(
-                "SELECT url, label FROM crawl_listings WHERE source = ? AND label IS NOT NULL", (adapter.NAME,)
+                "SELECT url, label FROM crawl_listings WHERE source = ? AND label IS NOT NULL ORDER BY url",
+                (adapter.NAME,),
             )
         ]
-        _enqueue(queue, queued, 1, known, max_listings, last_crawled)
+        # `category_first`: danh sách chung cũng vào vòng xoay (duyệt lâu nhất trước) → ngân sách request dồn cho trang
+        # danh mục chưa quét (mỗi trang ra ngành cho ~50 tin); mặc định danh sách chung luôn đi đầu (phủ tin mới nhất).
+        category_first = bool(source_cfg.get("category_first"))
+        # Trang theo tỉnh không gắn được ngành, tin của nó đã có trong danh sách chung → bỏ khi ưu tiên danh mục.
+        keep = (lambda item: item.industry_label or item.url == start_url) if category_first else (lambda item: True)
+        queue = [item for item in queue if keep(item)]
+        _enqueue(queue, queued, 0 if category_first else 1, known, max_listings, last_crawled, key)
         resume = dict(
             conn.execute(
                 "SELECT url, resume_page FROM crawl_listings WHERE source = ? AND resume_page IS NOT NULL",
@@ -526,7 +737,8 @@ def run_paged(
                     return "error"
                 stats.pages_fetched += 1
             if hasattr(adapter, "discover"):
-                _enqueue(queue, queued, index, adapter.discover(html), max_listings, last_crawled)
+                found = [item for item in adapter.discover(html) if keep(item)]
+                _enqueue(queue, queued, index, found, max_listings, last_crawled, key)
             if hasattr(adapter, "last_page") and (n := adapter.last_page(html, listing.url)):
                 last_page[listing.url] = max(last_page.get(listing.url, 0), n)
             jobs = adapter.parse_listing(html, listing.industry_label)
@@ -543,6 +755,7 @@ def run_paged(
                 return "empty"
             empty_first_pages = 0
             before = (stats.posts_new, stats.industry_filled)
+            new0, updated0 = stats.posts_new, stats.posts_updated
             unseen = sweep_since is not None and _has_unseen_since(conn, adapter.NAME, jobs, sweep_since)
             with conn:
                 for job in jobs:
@@ -554,6 +767,17 @@ def run_paged(
                         (adapter.NAME, listing.url, listing.industry_label, now_iso()),
                     )
             pages_done.append(url)
+            progress.info(
+                "%s · %s · trang %d: %d tin (%d mới, %d cập nhật) · tổng lần này %d mới · %d request",
+                adapter.NAME,
+                listing.industry_label or ("danh sách chung" if listing.url == start_url else "theo tỉnh/nghề"),
+                page,
+                len(jobs),
+                stats.posts_new - new0,
+                stats.posts_updated - updated0,
+                stats.posts_new,
+                client.requests_made,
+            )
             # Trang "có ích" = có tin mới, gắn được ngành cho tin đã có, hoặc có tin chưa thấy trong vòng quét này
             return "useful" if unseen or (stats.posts_new, stats.industry_filled) != before else "known"
 
@@ -630,6 +854,7 @@ def run_paged(
         pass
     except (Blocked, Disallowed) as exc:
         stats.blocked = f"{type(exc).__name__}: {exc}"
+        progress.warning("Dừng nguồn (không vượt chặn): %s", stats.blocked)
     except Exception as exc:
         stats.errors.append(f"{type(exc).__name__}: {exc}")
 
@@ -640,6 +865,7 @@ def run_paged(
             scope["detail"] = enrich_details(conn, cfg, client, adapter, detail_limit)
         except (Blocked, Disallowed) as exc:
             stats.blocked = f"{type(exc).__name__} (trang chi tiết): {exc}"
+            progress.warning("Dừng đọc trang chi tiết (không vượt chặn): %s", stats.blocked)
         except Exception as exc:
             stats.errors.append(f"trang chi tiết: {type(exc).__name__}: {exc}")
 
@@ -782,6 +1008,7 @@ def enrich_details(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, 
             no_jsonld_ids.clear()
         apply_detail(conn, cfg, adapter.NAME, row, detail)
         counts["enriched"] += 1
+        progress.info("%s · trang chi tiết %d/%d đã đọc", adapter.NAME, counts["enriched"], len(pending))
     return counts
 
 
@@ -914,13 +1141,21 @@ def _rotate(queue: list, start: int, last_crawled: dict[str, str]) -> None:
 
 
 def _enqueue(
-    queue: list, queued: set[str], index: int, found: list, max_listings: int, last_crawled: dict[str, str]
+    queue: list,
+    queued: set[str],
+    index: int,
+    found: list,
+    max_listings: int,
+    last_crawled: dict[str, str],
+    key=lambda url: url,
 ) -> None:
-    """Thêm danh sách mới phát hiện rồi sắp lại phần còn chờ theo vòng xoay."""
+    """Thêm danh sách mới phát hiện rồi sắp lại phần còn chờ theo vòng xoay.
+
+    `key`: hai URL cùng khoá là một danh sách (CareerLink đổi slug, giữ mã: `ke-toan/1` = `ke-toan-kiem-toan/1`)."""
     for item in found:
-        if item.url in queued or len(queue) >= max_listings:
+        if key(item.url) in queued or len(queue) >= max_listings:
             continue
-        queued.add(item.url)
+        queued.add(key(item.url))
         queue.append(item)
     _rotate(queue, index, last_crawled)
 

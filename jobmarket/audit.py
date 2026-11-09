@@ -28,7 +28,27 @@ SELECT p.id, p.source, p.url, p.title, p.salary_raw, p.salary_type, p.salary_fro
        p.posted_date, p.deadline,
        li.raw_label AS industry_raw, li.status AS industry_status, mi.name AS industry_name,
        ll.raw_label AS location_raw, ll.status AS location_status, mp.name AS province_name, p.location_count,
-       le.raw_label AS experience_raw, le.status AS experience_status, me.name AS experience_name
+       le.raw_label AS experience_raw, le.status AS experience_status, me.name AS experience_name,
+       (SELECT group_concat(raw_label, ' | ') FROM (
+            SELECT l.raw_label FROM job_industry_labels j JOIN labels l ON l.id = j.label_id
+            WHERE j.job_id = p.id ORDER BY j.position)) AS industries_raw,
+       (SELECT group_concat(name, ' | ') FROM (
+            SELECT DISTINCT m.name FROM job_industry_labels j
+            JOIN labels l ON l.id = j.label_id AND l.status = 'mapped'
+            JOIN master_industries m ON m.code = l.master_code
+            WHERE j.job_id = p.id)) AS industries_name,
+       (SELECT group_concat(name, ' | ') FROM (
+            SELECT DISTINCT c.name || COALESCE(' (' || g.name || ')', '') AS name FROM job_industry_labels j
+            JOIN labels l ON l.id = j.label_id
+            JOIN master_categories c ON c.code = l.category_code
+            LEFT JOIN master_industries g ON g.code = c.industry_code
+            WHERE j.job_id = p.id)) AS categories_name,
+       p.location_raw AS location_raw_full,
+       (SELECT group_concat(name, ' | ') FROM (
+            SELECT DISTINCT mp2.name FROM job_locations jl
+            JOIN labels l ON l.id = jl.label_id AND l.status = 'mapped'
+            JOIN master_provinces mp2 ON mp2.code = l.master_code
+            WHERE jl.job_id = p.id ORDER BY jl.position)) AS provinces_all
 FROM job_posts p
 LEFT JOIN labels li ON li.id = p.industry_label_id
 LEFT JOIN master_industries mi ON mi.code = li.master_code AND li.status = 'mapped'
@@ -71,12 +91,23 @@ def _mapped(raw: str | None, status: str | None, name: str | None) -> str:
 
 def field_rows(r: dict) -> list[tuple[str, str, str]]:
     """(trường, giá trị gốc, sau chuẩn hoá) của 1 tin."""
-    location = _mapped(r["location_raw"], r["location_status"], r["province_name"])
-    if (r["location_count"] or 0) > 1:
-        location += f" (tin ghi {r['location_count']} nơi — chỉ lấy nơi đầu)"
+    # Tin ghi nhiều nơi: hiện ĐỦ (thống kê tính tin ở mỗi nơi); đúng khi mọi nơi khớp trang thật
+    location = r.get("provinces_all") or _mapped(r["location_raw"], r["location_status"], r["province_name"])
+    shown = len(r["provinces_all"].split(" | ")) if r.get("provinces_all") else 1  # không có danh sách → 1 nơi
+    if (r["location_count"] or 0) > shown:
+        location += f" (nguồn ghi {r['location_count']} nơi, có nơi chưa xác định được tỉnh)"
+    location_raw = r.get("location_raw_full") or r["location_raw"]
+    # Tin nhiều mục ngành (nguồn không có mục chính, thống kê chia đều) → hiện đủ: đúng khi mỗi mục khớp trang thật.
+    # Có danh mục (kiểu CareerLink) → "Danh mục (Nhóm)"; chưa có → nhóm ngành.
+    industry_raw = r.get("industries_raw") or r["industry_raw"]
+    industry = (
+        r.get("categories_name")
+        or r.get("industries_name")
+        or _mapped(r["industry_raw"], r["industry_status"], r["industry_name"])
+    )
     return [
-        ("Ngành", r["industry_raw"] or NONE, _mapped(r["industry_raw"], r["industry_status"], r["industry_name"])),
-        ("Tỉnh/thành", r["location_raw"] or NONE, location),
+        ("Ngành", industry_raw or NONE, industry),
+        ("Tỉnh/thành", location_raw or NONE, location),
         ("Lương", r["salary_raw"] or NONE, salary_text(r)),
         (
             "Kinh nghiệm",

@@ -1,0 +1,22 @@
+alias,category_code,note
+Kế toán,CAT01,CareerLink /viec-lam/ke-toan/1 (slug cũ của mã 1)
+IT - Phần mềm,CAT07,CareerLink /viec-lam/it-phan-mem/19 (cùng mã 19)
+Sản xuất,CAT08,CareerLink /viec-lam/san-xuat-van-hanh-san-xuat/23 (nhãn ngắn trên link danh mục)
+Quản lý chất lượng (QA/QC),CAT20,CareerViet — cùng tên
+CNTT - Phần cứng / Mạng,CAT12,CareerViet — cùng nội dung IT - Phần cứng / Mạng
+Hành chính / Thư ký,CAT03,CareerViet
+Vận chuyển / Giao nhận / Kho vận,CAT11,CareerViet
+Xuất nhập khẩu,CAT22,CareerViet
+Biên phiên dịch,CAT16,CareerViet + Việc Làm 24h
+Bán hàng - Kinh doanh,CAT10,Việc Làm 24h
+Kế toán - Kiểm toán,CAT01,
+Kiểm toán,CAT01,Việc Làm 24h
+IT Phần mềm,CAT07,Việc Làm 24h
+IT Phần cứng - Mạng,CAT12,Việc Làm 24h
+Hành chính - Thư ký,CAT03,Việc Làm 24h
+Xuất Nhập Khẩu,CAT22,Việc Làm 24h
+Bán sỉ - Bán lẻ - Quản lý cửa hàng,CAT14,Việc Làm 24h
+Chăm sóc khách hàng,CAT06,Việc Làm 24h
+Quản lý tiêu chuẩn và chất lượng,CAT20,Việc Làm 24h
+Sản xuất - Lắp ráp - Chế biến,CAT08,Việc Làm 24h
+Dược phẩm,CAT09,Việc Làm 24h

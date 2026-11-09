@@ -45,6 +45,12 @@ def discover(html: str) -> list[ListingPage]:
     return [ListingPage(u, n) for u, n in categories.items()] + [ListingPage(u, None) for u in provinces]
 
 
+def listing_key(url: str) -> str:
+    """Khoá danh sách: trang danh mục định danh bằng MÃ (`/viec-lam/ke-toan/1` = `/viec-lam/ke-toan-kiem-toan/1`)."""
+    path = urlsplit(url).path
+    return f"category:{path.rsplit('/', 1)[1]}" if _CATEGORY.match(path) else url
+
+
 def listings(start_url: str, start_html: str) -> list[ListingPage]:
     """Danh sách chung trước (tin trang đầu được lưu ngay, kể cả khi bị chặn giữa chừng), rồi ngành, rồi tỉnh.
 
@@ -98,7 +104,8 @@ def card_date(node) -> str | None:
 
 def parse_detail(html: str) -> dict | None:
     """Trang chi tiết `/tim-viec-lam/<slug>/<id>` → trường từ JSON-LD `JobPosting` (sources/jsonld.py).
-    `industry` của CareerLink là danh sách mục cách nhau dấu phẩy, mục đầu = chức năng chính. None nếu không có."""
+    `industry` của CareerLink là danh sách mục cách nhau dấu phẩy, xếp theo MÃ danh mục tăng dần (không có mục chính —
+    kiểm 8/8 tin nhiều mục, 2026-11-09). None nếu không có."""
     posting = jsonld.find_job_posting(html)
     return jsonld.parse_job_posting(posting) if posting else None
 

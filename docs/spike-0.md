@@ -242,3 +242,34 @@ Hệ quả cho PLAN: mỗi nguồn là 1 adapter (`html_listing`, `api`, `datase
   occupation", che lỗi thật). Làm nghề cần trước hết một danh mục nghề đầy đủ.
 - **Còn mở**: tin trên con trỏ quét sâu hết hạn hàng loạt (> `deep_overlap_pages` trang giữa 2 lần chạy) vẫn có thể làm
   tin dịch lên vùng đã đọc → hết hạn nhầm, tự hồi phục khi thấy lại ở vòng sau.
+
+## Lượt 9 — ngành CareerLink theo danh mục (2026-11-09, không request mạng)
+
+- **Sửa nhận định Lượt 6:** `industry` trang chi tiết xếp mục theo **MÃ danh mục tăng dần** (8/8 tin nhiều mục, vd
+  CNTT 19 → Bán hàng 31 → Tư vấn kỹ thuật 205), **không** phải "mục đầu = chức năng chính". Lấy mục đầu làm ngành
+  chính khiến mã nhỏ luôn thắng ("Nhân viên kinh doanh" → Dịch vụ khách hàng 9; "Dược sĩ bán thuốc" → Tư vấn DVKH 7).
+  Nguồn không có mục chính → thống kê **chia đều** tin cho mọi mục; `industry_label_id` chỉ là nhãn đại diện để lọc.
+- **Hiện trạng đo trên DB:** 4.916 tin, 54% không ngành; ngành còn lại là danh mục đang duyệt lúc gặp tin; chỉ 25 tin có
+  trang chi tiết → tỷ trọng ngành gần như không có tin CareerLink. 18 danh mục đã biết (2 cặp trùng mã: `ke-toan/1` =
+  `ke-toan-kiem-toan/1`, `cntt-phan-mem/19` = `it-phan-mem/19`), hầu hết chưa từng quét: danh sách chung luôn đi đầu
+  và dùng hết ngân sách ~40 request/lần.
+- **Thay đổi:** tin gặp ở danh mục nào thì **tích luỹ** danh mục đó (`job_industry_labels`); `category_first = true`
+  (danh sách chung vào vòng xoay, bỏ trang tỉnh, danh mục cùng mã là một); ngành theo danh mục vào tỷ trọng khi
+  **mọi** danh mục ngành đã quét trọn ≥ 1 vòng (`health` hiện tiến độ). `backfill` nạp lại từ thẻ tin đã lưu:
+  1.953 tin có mục ngành (trước: 25 tính được).
+- **Địa điểm đúng:** 4.886/4.916 ánh xạ, theo 34 tỉnh mới (vd tin "… - Hải Dương" hiện Hải Phòng là đúng sau sáp nhập).
+  Chưa xử lý: 26 tin làm việc tại Nhật Bản đang "bỏ qua" (ngoài danh mục tỉnh), 287 tin nhiều nơi chỉ tính nơi đầu.
+
+## Lượt 10 — phân loại giống CareerLink (2026-11-09, migration 009, không request mạng)
+
+- **Ngành 2 cấp:** `master_categories` (danh mục đặt tên đúng như CareerLink, kèm mã `/viec-lam/<slug>/<id>` nếu biết)
+  thuộc một nhóm trong 15 nhóm `master_industries`. `labels.category_code` = danh mục của nhãn ngành nguồn. 23 danh mục
+  đã biết nạp từ `seeds/categories.csv`; danh mục CareerLink mới gặp **tự thêm** (tên CareerLink, nhóm theo ánh xạ).
+  Nguồn khác chỉ có danh mục khi tương đương rõ (`seeds/category_aliases.csv`); VietJobs (nhóm rộng) chỉ có nhóm.
+  Đo trên DB: 1.953 tin CareerLink, 4.041 CareerViet, 530 Việc Làm 24h có danh mục.
+- **Mọi nơi làm việc:** `job_locations` (+ `job_posts.location_raw`), nạp lại từ bản gốc bằng `backfill-locations`
+  (thẻ tin; Việc Làm 24h: mã tỉnh trong `item`, tên học từ tin 1 tỉnh; VietJobs: file dataset). 3.205 tin nhiều nơi
+  (CareerLink 287, CareerViet 582, Việc Làm 24h 135, VietJobs 2.201). Thống kê theo tỉnh đếm tin ở **mỗi** nơi (như
+  CareerLink lọc theo tỉnh → tổng các tỉnh > số tin); lọc tỉnh khớp nếu bất kỳ nơi nào khớp.
+- **Tên tỉnh** theo CareerLink: "Hồ Chí Minh" (mã HCM giữ nguyên).
+- View cho bên đọc ngoài: `v_job_categories`, `v_job_locations` (MySQL chỉ chép bảng, không chép view).

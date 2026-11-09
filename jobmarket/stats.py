@@ -15,13 +15,15 @@ import pandas as pd
 from jobmarket.dedup import company_core
 from jobmarket.normalize.text import norm_key
 
-UNCLASSIFIED = {"industry": "(chưa phân loại)", "province": "(chưa xác định)"}
+UNCLASSIFIED = {"industry": "(chưa phân loại)", "category": "(chưa phân loại)", "province": "(chưa xác định)"}
 UNCLASSIFIED_DEFAULT = "(chưa phân loại)"
 SMALL_SAMPLE = "n<5"
 
 # dimension → (cột mã trong view, bảng danh mục, cột thứ tự)
 DIMENSIONS = {
     "industry": ("industry_code", "master_industries", "sort_order"),
+    # Danh mục kiểu CareerLink (2 cấp: danh mục thuộc 1 nhóm ngành); category_code = danh mục đầu của tin
+    "category": ("category_code", "master_categories", "sort_order"),
     "occupation": ("occupation_code", "master_occupations", None),
     "province": ("province_code", "master_provinces", None),
     "experience": ("experience_code", "master_experiences", "sort_order"),
@@ -37,6 +39,7 @@ class Filters:
     date_to: date | None = None
     sources: list[str] = field(default_factory=list)
     industries: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)
     provinces: list[str] = field(default_factory=list)
     experiences: list[str] = field(default_factory=list)
     levels: list[str] = field(default_factory=list)
@@ -109,6 +112,23 @@ def load_unique(
         high = df["salary_mid"] > float(max_monthly_salary)
         df.loc[high, "salary_mid"] = None
         df.loc[high, "salary_excluded"] = "too_high"
+    df["category_codes"] = _multi_codes(
+        conn,
+        df,
+        """SELECT j.job_id, c.code, c.name, c.sort_order FROM job_industry_labels j
+           JOIN labels l ON l.id = j.label_id AND l.status <> 'ignored'
+           JOIN master_categories c ON c.code = l.category_code
+           ORDER BY j.job_id, j.position""",
+    )
+    df["category_code"] = df["category_codes"].map(lambda t: t[0][0] if t else None)
+    df["province_codes"] = _multi_codes(
+        conn,
+        df,
+        """SELECT jl.job_id, p.code, p.name, NULL FROM job_locations jl
+           JOIN labels l ON l.id = jl.label_id AND l.status = 'mapped'
+           JOIN master_provinces p ON p.code = l.master_code
+           ORDER BY jl.job_id, jl.position""",
+    )
     for dim, (code_col, table, order_col) in DIMENSIONS.items():
         order = order_col or "rowid"
         rows = conn.execute(f"SELECT code, name, {order} FROM {table}").fetchall()
@@ -122,40 +142,60 @@ def load_unique(
     return apply_filters(df, filters) if filters else df
 
 
+def _multi_codes(conn: sqlite3.Connection, df: pd.DataFrame, query: str) -> pd.Series:
+    """Giá trị KHÁC NHAU (mã, tên, thứ tự) của một chiều nhiều giá trị cho từng tin, theo thứ tự nguồn."""
+    if df.empty:
+        return pd.Series(dtype=object)
+    codes: dict[int, dict[str, tuple]] = {}
+    for job_id, code, name, order in conn.execute(query):
+        codes.setdefault(job_id, {}).setdefault(code, (code, name, order if order is not None else 10_000))
+    return df["id"].map(lambda i: tuple(codes.get(i, {}).values()))
+
+
 def _industry_codes(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
     """Mã ngành chuẩn KHÁC NHAU của mọi mục ngành của tin (bảng job_industry_labels, theo thứ tự nguồn); tin một
     ngành có 1 phần tử; tin không có bảng mục ngành → tuple rỗng (dùng industry_code)."""
-    if df.empty:
-        return pd.Series(dtype=object)
-    rows = conn.execute(
+    return _multi_codes(
+        conn,
+        df,
         """SELECT j.job_id, m.code, m.name, m.sort_order FROM job_industry_labels j
            JOIN labels l ON l.id = j.label_id AND l.status = 'mapped'
            JOIN master_industries m ON m.code = l.master_code
-           ORDER BY j.job_id, j.position"""
-    ).fetchall()
-    codes: dict[int, list[tuple]] = {}
-    for job_id, code, name, order in rows:
-        seen = codes.setdefault(job_id, [])
-        if code not in [c[0] for c in seen]:
-            seen.append((code, name, order))
-    return df["id"].map(lambda i: tuple(codes.get(i, ())))
+           ORDER BY j.job_id, j.position""",
+    )
 
 
-def industry_alloc(df: pd.DataFrame) -> pd.DataFrame:
-    """Mỗi tin → (một hoặc nhiều) dòng ngành, trọng số 1/k khi tin có k ngành chuẩn khác nhau (đếm chia đều)."""
-    if "industry_codes" not in df or df.empty:
-        return df.assign(weight=1.0)
-    k = df["industry_codes"].map(len)
-    multi = k > 1
-    single = df[~multi].assign(weight=1.0)
-    if not multi.any():
-        return single
-    spread = df[multi].assign(_alloc=df.loc[multi, "industry_codes"].map(list), weight=1.0 / k[multi])
+# Chiều nhiều giá trị → (cột bộ giá trị, chia đều?, số giá trị tối thiểu để tách dòng).
+# Ngành/danh mục: tin k mục tính 1/k mỗi mục (tổng = số tin); tin 1 ngành giữ mã ngành của view.
+# Tỉnh: tin ghi nhiều nơi tính ĐỦ 1 ở mỗi nơi (như CareerLink lọc theo tỉnh) → tổng > số tin.
+MULTI_DIMENSIONS = {
+    "industry": ("industry_codes", True, 2),
+    "category": ("category_codes", True, 1),
+    "province": ("province_codes", False, 1),
+}
+
+# Chiều suy từ trang danh mục đang duyệt → chỉ tính tin có phân loại so sánh được (industry_comparable)
+LISTING_BASED_DIMS = {"industry", "category"}
+
+
+def allocate(df: pd.DataFrame, dim: str) -> pd.DataFrame:
+    """Mỗi tin → một dòng cho mỗi giá trị của chiều `dim` kèm trọng số (giữ trọng số đã có khi gọi nối tiếp)."""
+    df = df.assign(weight=df.get("weight", 1.0))
+    if dim not in MULTI_DIMENSIONS or MULTI_DIMENSIONS[dim][0] not in df or df.empty:
+        return df
+    col, share, min_k = MULTI_DIMENSIONS[dim]
+    k = df[col].map(len)
+    has = k >= min_k  # tin chưa có giá trị nào (chưa phân loại / dữ liệu cũ) giữ mã hiện có
+    if not has.any():
+        return df
+    spread = df[has].assign(_alloc=df.loc[has, col].map(list))
+    if share:
+        spread["weight"] = spread["weight"] / k[has]
     spread = spread.explode("_alloc")
-    spread["industry_code"] = spread["_alloc"].map(lambda t: t[0])
-    spread["industry_name"] = spread["_alloc"].map(lambda t: t[1])
-    spread["industry_order"] = spread["_alloc"].map(lambda t: t[2])
-    return pd.concat([single, spread.drop(columns="_alloc")], ignore_index=True)
+    values = spread.pop("_alloc").tolist()
+    for i, suffix in enumerate(("code", "name", "order")):
+        spread[f"{dim}_{suffix}"] = [t[i] for t in values]
+    return pd.concat([df[~has], spread], ignore_index=True)
 
 
 # Nguồn mà ngành của tin lấy từ TRANG DANH MỤC đang duyệt (không phải từ chính tin): tỷ trọng ngành phản ánh danh
@@ -164,13 +204,43 @@ def industry_alloc(df: pd.DataFrame) -> pd.DataFrame:
 LISTING_INDUSTRY_SOURCES = {"careerlink", "jobsgo"}
 
 
+def category_sweep_progress(conn: sqlite3.Connection, source: str) -> tuple[int, int]:
+    """(số danh mục ngành đã quét trọn ≥ 1 vòng, tổng số danh mục ngành đã biết) của nguồn.
+
+    Danh mục cùng mã (đổi slug) tính là một; bỏ danh mục không phải ngành (nhãn 'ignored', vd "Tiếng Nhật")."""
+    ignored = {
+        r[0]
+        for r in conn.execute(
+            "SELECT raw_label FROM labels WHERE source = ? AND label_type = 'industry' AND status = 'ignored'",
+            (source,),
+        )
+    }
+    swept: dict[str, bool] = {}
+    for url, label, done in conn.execute(
+        "SELECT url, label, last_full_sweep_started_at IS NOT NULL FROM crawl_listings "
+        "WHERE source = ? AND label IS NOT NULL",
+        (source,),
+    ):
+        if label in ignored:
+            continue
+        match = re.search(r"/(\d+)$", url)
+        key = match.group(1) if match else url
+        swept[key] = swept.get(key, False) or bool(done)
+    return sum(swept.values()), len(swept)
+
+
 def _industry_basis(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
-    """'item' = ngành ghi trên chính tin; 'listing' = suy từ trang danh mục đang duyệt (không tính tỷ trọng)."""
+    """'item' = ngành ghi trên chính tin (trang chi tiết); 'category' = các danh mục chứa tin, nguồn ĐÃ quét trọn mọi
+    danh mục ngành ≥ 1 vòng (mục ngành của tin đủ theo các danh mục đã biết → tính tỷ trọng, chia đều); 'listing' =
+    danh mục chưa quét hết (tỷ trọng sẽ lệch về danh mục quét trước → không tính)."""
     if df.empty:
         return pd.Series(dtype=object)
     detail = dict(conn.execute("SELECT id, detail_fetched_at IS NOT NULL FROM job_posts").fetchall())
     from_listing = df["source"].isin(LISTING_INDUSTRY_SOURCES) & ~df["id"].map(detail).fillna(0).astype(bool)
-    return from_listing.map({True: "listing", False: "item"})
+    complete = {s for s in LISTING_INDUSTRY_SOURCES if (p := category_sweep_progress(conn, s))[1] and p[0] == p[1]}
+    basis = pd.Series("item", index=df.index, dtype=object)
+    basis[from_listing] = np.where(df.loc[from_listing, "source"].isin(complete), "category", "listing")
+    return basis
 
 
 def _status_known(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
@@ -193,7 +263,7 @@ def _status_known(conn: sqlite3.Connection, df: pd.DataFrame) -> pd.Series:
 
 
 def industry_comparable(df: pd.DataFrame) -> pd.DataFrame:
-    """Tập dùng cho cơ cấu/tỷ trọng/xu hướng NGÀNH: chỉ tin có ngành gắn theo tin."""
+    """Tập dùng cho cơ cấu/tỷ trọng/xu hướng NGÀNH: tin có ngành gắn theo tin, hoặc theo danh mục đã quét trọn."""
     return df[df["industry_basis"] != "listing"] if "industry_basis" in df else df
 
 
@@ -225,15 +295,22 @@ def apply_filters(df: pd.DataFrame, f: Filters) -> pd.DataFrame:
         mask &= unknown | (df["event_date"] >= pd.Timestamp(f.date_from))
     if f.date_to:
         mask &= unknown | (df["event_date"] <= pd.Timestamp(f.date_to))
-    for values, col in (
-        (f.sources, "source"),
-        (f.industries, "industry_code"),
-        (f.provinces, "province_code"),
-        (f.experiences, "experience_code"),
-        (f.levels, "level_code"),
+    for values, col, multi in (
+        (f.sources, "source", None),
+        (f.industries, "industry_code", "industry_codes"),
+        (f.categories, "category_code", "category_codes"),
+        (f.provinces, "province_code", "province_codes"),
+        (f.experiences, "experience_code", None),
+        (f.levels, "level_code", None),
     ):
-        if values:
-            mask &= df[col].isin(values)
+        if not values:
+            continue
+        hit = df[col].isin(values)
+        # Chiều nhiều giá trị: tin khớp nếu BẤT KỲ giá trị nào khớp (tin Hà Nội + HCM có trong lọc "Hồ Chí Minh")
+        if multi and multi in df:
+            codes = df[multi].explode().dropna().str[0]
+            hit |= df.index.isin(codes.index[codes.isin(values)])
+        mask &= hit
     return df[mask]
 
 
@@ -307,15 +384,15 @@ def demand_by(
 
     Chiều ngành: chỉ tin có ngành gắn theo tin (`industry_comparable`) — ngành suy từ danh mục đang duyệt làm lệch
     tỷ trọng."""
-    if dim == "industry":
+    if dim in LISTING_BASED_DIMS:
         df = industry_comparable(df)
     name = f"{dim}_name"
     cur, prev = _windows(as_of, window_days)
     work = df.assign(
         active=is_active(df, as_of, seen_days), new=_in(df["event_date"], cur), prev=_in(df["event_date"], prev)
     )
-    # Ngành: tin nhiều ngành chia đều 1/k cho mỗi ngành (tổng vẫn = số tin)
-    work = industry_alloc(work) if dim == "industry" else work.assign(weight=1.0)
+    # Ngành/danh mục: tin nhiều mục chia đều 1/k (tổng = số tin); tỉnh: tin nhiều nơi tính đủ ở mỗi nơi
+    work = allocate(work, dim)
     for col in ("active", "new", "prev"):
         work[col] = work[col].astype(float) * work["weight"]
     out = (
@@ -391,7 +468,9 @@ def monthly(df: pd.DataFrame, end_month: date, months: int = 6) -> pd.DataFrame:
 
 def heatmap(df: pd.DataFrame, rows: str = "industry", cols: str = "province") -> pd.DataFrame:
     """M06: số tin theo cặp (ngành, tỉnh)."""
-    df = industry_alloc(industry_comparable(df)) if "industry" in (rows, cols) else df.assign(weight=1.0)
+    if LISTING_BASED_DIMS & {rows, cols}:
+        df = industry_comparable(df)
+    df = allocate(allocate(df.drop(columns="weight", errors="ignore"), rows), cols)
     table = pd.crosstab(df[f"{rows}_name"], df[f"{cols}_name"], values=df["weight"], aggfunc="sum").fillna(0)
     table = table.apply(_tidy_counts)
     table["Tổng"] = _tidy_counts(table.sum(axis=1))
@@ -406,6 +485,9 @@ def salary_by(df: pd.DataFrame, dim: str, min_n: int) -> pd.DataFrame:
     """
     name = f"{dim}_name"
     rows = []
+    # Danh mục/tỉnh: tin vào lương của MỖI danh mục/nơi nó thuộc (cùng cách đếm với màn nhu cầu)
+    if dim in MULTI_DIMENSIONS:
+        df = allocate(df, dim)
     ordered = df.sort_values([f"{dim}_order", name], kind="stable")
     for group, part in ordered.groupby(name, sort=False):
         s = part["salary_mid"].dropna()
@@ -436,7 +518,9 @@ def trend(df: pd.DataFrame, end_month: date, min_vol: int, threshold: float, dim
     """T01–T02: Σ 3 tháng gần nhất vs Σ 3 tháng liền trước; nhóm chưa phân loại không xét."""
     periods = pd.period_range(end=pd.Period(end_month, "M"), periods=6, freq="M")
     name = f"{dim}_name"
-    df = industry_alloc(industry_comparable(df)) if dim == "industry" else df.assign(weight=1.0)
+    if dim in LISTING_BASED_DIMS:
+        df = industry_comparable(df)
+    df = allocate(df, dim)
     data = df[~df[name].isin(set(UNCLASSIFIED.values()) | {UNCLASSIFIED_DEFAULT})]
     table = (
         pd.crosstab(data[name], data["event_date"].dt.to_period("M"), values=data["weight"], aggfunc="sum")

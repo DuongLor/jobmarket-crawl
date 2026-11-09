@@ -49,8 +49,8 @@ if not c.empty_state(ctx):
 
     # Chiều mà không nguồn nào cung cấp (hiện: nghề) thì ẩn hẳn tab, không để tab chỉ có ghi chú
     has_occupation = c.coverage(ctx, "occupation") > 0
-    names_ = ["Theo kinh nghiệm", "Theo cấp bậc", "Theo địa phương", *(["Theo nghề"] if has_occupation else []),
-              "Loại lương"]  # fmt: skip
+    names_ = ["Theo kinh nghiệm", "Theo cấp bậc", "Theo địa phương", "Theo danh mục",
+              *(["Theo nghề"] if has_occupation else []), "Loại lương"]  # fmt: skip
     tabs = dict(zip(names_, st.tabs(names_), strict=True))
     with tabs["Theo kinh nghiệm"]:
         show("experience", "Kinh nghiệm", "csv_exp")
@@ -59,6 +59,10 @@ if not c.empty_state(ctx):
         st.caption("Cấp bậc lấy từ nguồn khi có; nguồn không có thì chỉ suy từ tiêu đề khi có từ khoá rõ ràng.")
     with tabs["Theo địa phương"]:
         show("province", "Địa phương", "csv_prov")
+        st.caption("Tin ghi nhiều nơi làm việc được tính vào lương của mỗi nơi.")
+    with tabs["Theo danh mục"]:
+        show("category", "Danh mục", "csv_cat", drop_unclassified=True)
+        st.caption(f"Danh mục đặt tên theo CareerLink; ẩn tin chưa có danh mục. Danh mục ít mẫu hiện n<{min_n}.")
     if has_occupation:
         with tabs["Theo nghề"]:
             show("occupation", "Nghề", "csv_occ", drop_unclassified=True)

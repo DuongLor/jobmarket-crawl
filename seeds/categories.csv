@@ -1,0 +1,24 @@
+code,name,industry_code,careerlink_id,sort_order
+CAT01,Kế toán / Kiểm toán,IND04,1,1
+CAT02,Ngân hàng,IND04,5,2
+CAT03,Thư ký / Hành chánh,IND11,6,3
+CAT04,Tư vấn dịch vụ khách hàng,IND03,7,4
+CAT05,Xây dựng,IND09,8,5
+CAT06,Dịch vụ khách hàng,IND03,9,6
+CAT07,CNTT - Phần mềm,IND01,19,7
+CAT08,Sản xuất / Vận hành sản xuất,IND02,23,8
+CAT09,Dược / Sinh học,IND08,28,9
+CAT10,Bán hàng / Kinh doanh,IND03,31,10
+CAT11,Vận chuyển / Giao thông / Kho bãi,IND06,34,11
+CAT12,IT - Phần cứng / Mạng,IND01,130,12
+CAT13,Kiến trúc,IND09,139,13
+CAT14,Bán lẻ / Bán sỉ,IND03,190,14
+CAT15,Tư vấn kỹ thuật,,205,15
+CAT16,Biên phiên dịch / Thông dịch viên,IND15,,16
+CAT17,Dệt may / Da giày,IND02,,17
+CAT18,Hóa chất / Sinh hóa / Thực phẩm,IND02,,18
+CAT19,Kỹ thuật ứng dụng / Cơ khí,IND02,,19
+CAT20,Quản lý chất lượng (QA / QC),IND02,,20
+CAT21,Thời trang,,,21
+CAT22,Xuất nhập khẩu / Ngoại thương,IND06,,22
+CAT23,Điện / Điện tử,IND12,,23

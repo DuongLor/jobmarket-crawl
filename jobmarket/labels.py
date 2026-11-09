@@ -152,7 +152,7 @@ def remap_rules(conn: sqlite3.Connection) -> dict[str, int]:
     Dùng sau khi sửa seeds (thêm quận/huyện, đổi ngành của một bí danh…): nhãn của quy tắc đi theo quy tắc hiện tại,
     kể cả bỏ ánh xạ khi quy tắc không còn. KHÔNG đụng nhãn ánh xạ/bỏ qua tay (CLI, dashboard).
     """
-    from jobmarket.pipeline import IGNORE, _rule_mapping
+    from jobmarket.pipeline import IGNORE, _rule_mapping, assign_categories
 
     changed: dict[str, int] = {}
     rows = conn.execute(
@@ -165,6 +165,8 @@ def remap_rules(conn: sqlite3.Connection) -> dict[str, int]:
         action, master = ("ignore", None) if code == IGNORE else ("map", code) if code else ("unmap", None)
         if apply(conn, row["id"], action, master, reason="quy tắc cố định (remap)", via="rule"):
             changed[row["label_type"]] = changed.get(row["label_type"], 0) + 1
+    if categories := assign_categories(conn):  # danh mục kiểu CareerLink đi theo seeds/categories + category_aliases
+        changed["category"] = categories
     return changed
 
 

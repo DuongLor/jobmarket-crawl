@@ -57,7 +57,12 @@ class Context:
 
 DATA_VERSION_SQL = """SELECT (SELECT MAX(id) FROM job_posts), (SELECT MAX(last_seen_at) FROM job_posts),
     (SELECT COUNT(*) FROM job_posts WHERE status = 'expired'), (SELECT COUNT(*) FROM label_history),
-    (SELECT COUNT(*) FROM master_industries) + (SELECT COUNT(*) FROM master_occupations)"""
+    (SELECT COUNT(*) FROM master_industries) + (SELECT COUNT(*) FROM master_occupations),
+    (SELECT COUNT(*) FROM job_locations), (SELECT TOTAL(label_id * (position + 1)) FROM job_locations),
+    (SELECT COUNT(*) FROM job_industry_labels), (SELECT TOTAL(label_id * (position + 1)) FROM job_industry_labels),
+    (SELECT COUNT(category_code) FROM labels), (SELECT TOTAL(rowid * length(category_code)) FROM labels),
+    (SELECT COUNT(*) FROM master_categories), (SELECT COUNT(industry_code) FROM master_categories)"""
+# job_locations / job_industry_labels / danh mục: backfill-locations, backfill, remap đổi chúng mà không đổi job_posts
 
 
 @st.cache_data(show_spinner="Đang nạp dữ liệu…", max_entries=4)
@@ -135,6 +140,7 @@ def current_filters(as_of: date | None, historical: bool = False) -> stats.Filte
         date_to=as_of,
         sources=list(s.get("f_sources", [])),
         industries=list(s.get("f_industries", [])),
+        categories=list(s.get("f_categories", [])),
         provinces=list(s.get("f_provinces", [])),
         experiences=list(s.get("f_experiences", [])),
         levels=list(s.get("f_levels", [])),
@@ -143,7 +149,7 @@ def current_filters(as_of: date | None, historical: bool = False) -> stats.Filte
 
 def _reset_filters() -> None:
     st.session_state["f_period"] = DEFAULT_PERIOD
-    for key in ("f_sources", "f_industries", "f_provinces", "f_experiences", "f_levels"):
+    for key in ("f_sources", "f_industries", "f_categories", "f_provinces", "f_experiences", "f_levels"):
         st.session_state[key] = []
 
 
@@ -167,6 +173,7 @@ def render_filters(ctx_masters: dict[str, dict[str, str]], sources: list[str]) -
                    placeholder="Tất cả nguồn")  # fmt: skip
     for key, dim, label in (
         ("f_industries", "industry", "Ngành"),
+        ("f_categories", "category", "Danh mục"),
         ("f_provinces", "province", "Địa phương"),
         ("f_experiences", "experience", "Kinh nghiệm"),
         ("f_levels", "level", "Cấp bậc"),
@@ -183,7 +190,8 @@ def filter_summary(ctx: Context) -> str:
     if not ctx.historical:
         parts.append(st.session_state.get("f_period", DEFAULT_PERIOD))
     for values, dim in (
-        (f.industries, "industry"), (f.provinces, "province"), (f.experiences, "experience"), (f.levels, "level")
+        (f.industries, "industry"), (f.categories, "category"), (f.provinces, "province"),
+        (f.experiences, "experience"), (f.levels, "level"),
     ):  # fmt: skip
         if values:
             parts.append(", ".join(ctx.masters[dim].get(v, v) for v in values))

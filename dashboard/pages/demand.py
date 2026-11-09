@@ -50,13 +50,21 @@ if not c.empty_state(ctx):
         st.dataframe(view.rename(columns={dim: column, **labels}), hide_index=True, width="stretch")
         c.csv_button(t, f"nhu_cau_{dim}", key)
 
-    tab_ind, tab_loc, tab_time, tab_heat = st.tabs(["Theo ngành", "Theo địa phương", "Theo thời gian", "Bản đồ nhiệt"])
+    tab_ind, tab_cat, tab_loc, tab_time, tab_heat = st.tabs(
+        ["Theo nhóm ngành", "Theo danh mục", "Theo địa phương", "Theo thời gian", "Bản đồ nhiệt"]
+    )
     with tab_ind:
         show("industry", "Ngành", "Phân bổ theo ngành", "Tổng các nhóm bằng số tin tính cơ cấu, gồm cả “(chưa phân "
              "loại)”. " + c.industry_share_note(ctx), "csv_ind", "ngành")  # fmt: skip
+    with tab_cat:
+        show("category", "Danh mục", "Phân bổ theo danh mục (giống CareerLink)", "Danh mục là cấp chi tiết dưới "
+             "nhóm ngành, đặt tên theo CareerLink; nguồn khác chỉ có danh mục khi tương đương rõ, còn lại vào “(chưa "
+             "phân loại)”. Tin nhiều danh mục chia đều cho mỗi danh mục. " + c.industry_share_note(ctx),
+             "csv_cat", "danh mục")  # fmt: skip
     with tab_loc:
-        show("province", "Địa phương", "Phân bổ theo địa phương", "Tin nhiều địa điểm chỉ lấy địa điểm đầu tiên. "
-             "Tỉnh quy về 34 đơn vị hành chính sau sáp nhập 2025.", "csv_loc", "địa phương")  # fmt: skip
+        show("province", "Địa phương", "Phân bổ theo địa phương", "Tin ghi nhiều nơi làm việc được tính ở "
+             "MỖI nơi (như CareerLink) → tổng các tỉnh lớn hơn số tin. Tỉnh quy về 34 đơn vị hành chính sau sáp "
+             "nhập 2025.", "csv_loc", "địa phương")  # fmt: skip
     with tab_time:
         if ctx.historical:
             c.snapshot_note("tin đăng/làm mới theo tháng")

@@ -76,6 +76,15 @@ def seed(conn: sqlite3.Connection) -> None:
             "INSERT OR REPLACE INTO label_aliases VALUES (?, ?, ?)",
             [(r["label_type"], norm_key(r["alias"]), r["code"] or None) for r in _rows("label_aliases.csv")],
         )
+        conn.executemany(
+            "INSERT OR IGNORE INTO master_categories VALUES "
+            "(:code, :name, NULLIF(:industry_code, ''), NULLIF(:careerlink_id, ''), :sort_order)",
+            _rows("categories.csv"),
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO category_aliases VALUES (?, ?)",
+            [(norm_key(r["alias"]), r["category_code"]) for r in _rows("category_aliases.csv")],
+        )
 
 
 def init_db(db_file: Path) -> sqlite3.Connection:

@@ -47,6 +47,7 @@ python -m venv .venv
 .venv/Scripts/python -m jobmarket health            # chuỗi ngày liên tục có dữ liệu theo nguồn (mốc ≥ 7 ngày), lần chạy kẹt
 .venv/Scripts/python -m jobmarket mysql-sync        # chép DB sang MySQL schema `jobmarket` để xem bằng Workbench (tự chạy sau run/start nếu [mysql] enabled)
 .venv/Scripts/python -m jobmarket audit             # 30 tin ngẫu nhiên/nguồn → data/audit/*.xlsx để đối chiếu trang thật; --score <file> chấm
+.venv/Scripts/python -m jobmarket backfill-locations  # mọi nơi làm việc của tin cũ từ bản gốc đã lưu (không request mạng)
 .venv/Scripts/python -m jobmarket dashboard         # mở dashboard http://127.0.0.1:8501 (chỉ máy này, dữ liệu thật)
 .venv/Scripts/python -m jobmarket demo              # tạo data/demo.db từ 374 tin mẫu của mockup
 .venv/Scripts/python -m jobmarket dashboard --demo  # dashboard trên dữ liệu mẫu (không đụng DB thật)

@@ -1,6 +1,7 @@
 """CLI: python -m jobmarket <lệnh>"""
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -11,11 +12,13 @@ from pathlib import Path
 
 import typer
 
-from jobmarket import audit, health, labels, mysql_mirror, report
+from jobmarket import audit, health, labels, mysql_mirror, report, stats
 from jobmarket.config import DB_ENV, PROJECT_ROOT, load_config
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
 from jobmarket.pipeline import (
     backfill_industry_labels,
+    backfill_listing_industries,
+    backfill_locations,
     backfill_posted_dates,
     enrich_details,
     import_saved_pages,
@@ -72,6 +75,32 @@ def run_source(conn, cfg, client, name: str, max_pages: int | None) -> int:
     return run_paged(conn, cfg, client, PAGED_SOURCES[name], max_pages=max_pages)
 
 
+def stamped(message: str) -> str:
+    return f"[{datetime.now():%H:%M:%S}] {message}"
+
+
+def echo(message: str) -> None:
+    typer.echo(stamped(message))
+
+
+class _ProgressHandler(logging.Handler):
+    def __init__(self, say) -> None:
+        super().__init__()
+        self.say = say
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.say(record.getMessage())
+
+
+def show_progress(say) -> None:
+    """In tiến độ crawl từng trang (logger `jobmarket.progress` của pipeline) qua `say`."""
+    log = logging.getLogger("jobmarket.progress")
+    log.handlers.clear()
+    log.addHandler(_ProgressHandler(say))
+    log.setLevel(logging.INFO)
+    log.propagate = False
+
+
 @app.command()
 def run(
     source: str = typer.Option("all", help="Tên nguồn, hoặc 'all' = mọi nguồn đang bật trong config.toml"),
@@ -89,24 +118,32 @@ def run(
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
     health.close_stale_runs(conn, older_than_minutes=STALE_RUN_MINUTES)
+    show_progress(echo)
     failed = crawled = False
     for name in names:
         due, next_at = _crawl_due(conn, name, min_hours)
         if not (due or force):
             skipped = f"đã chạy trong {min_hours:g} giờ qua; lần tới {next_at}"
-            typer.echo(json.dumps({"source": name, "skipped": skipped}, ensure_ascii=False))
+            echo(f"{name}: bỏ qua — {skipped} (thêm --force để chạy ngay)")
             continue
+        pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
+        echo(f"{name}: bắt đầu crawl (~{pace} giây/request, mỗi trang đọc xong in 1 dòng)…")
         client = _client_for(cfg, name)
         try:
             run_id = run_source(conn, cfg, client, name, max_pages)
         except KeyboardInterrupt:
             health.close_stale_runs(conn, source=name)
+            echo(f"{name}: dừng giữa chừng — lần chạy ghi là 'interrupted', tin đã lưu vẫn giữ")
             raise
         finally:
             client.close()
         row = dict(conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone())
         keys = ("id", "source", "status", "pages_fetched", "posts_new", "posts_updated", "posts_rejected",
                 "errors_count", "error_sample")  # fmt: skip
+        echo(
+            f"{name}: XONG — {row['status']} · {row['posts_new']} tin mới · {row['posts_updated']} cập nhật · "
+            f"{client.requests_made} request" + (f" · ghi chú: {row['error_sample']}" if row["errors_count"] else "")
+        )
         typer.echo(json.dumps({k: row[k] for k in keys} | {"requests_made": client.requests_made}, ensure_ascii=False))
         failed |= row["status"] == "failed"
         crawled = True
@@ -248,11 +285,12 @@ def start(
     log_dir.mkdir(parents=True, exist_ok=True)
 
     def say(message: str) -> None:
-        line = f"[{datetime.now():%H:%M:%S}] {message}"
+        line = stamped(message)
         typer.echo(line)
         with (log_dir / f"start_{datetime.now():%Y-%m-%d}.log").open("a", encoding="utf-8") as f:
             f.write(line + "\n")
 
+    show_progress(say)  # mỗi trang crawl xong in 1 dòng (và ghi log)
     url = f"http://127.0.0.1:{port}"
     dashboard = subprocess.Popen(
         [sys.executable, "-m", "streamlit", "run", str(PROJECT_ROOT / "dashboard" / "app.py"), "--server.address",
@@ -402,6 +440,11 @@ def health_cmd(
             f"  {name:<11} liên tục {info['streak_days']} ngày · tổng {info['data_days']} ngày có dữ liệu · "
             f"lỗi 24h: {info['failed_24h']} · gần nhất: {last_txt}"
         )
+    for name in sorted(stats.LISTING_INDUSTRY_SOURCES & set(sources)):
+        done, total = stats.category_sweep_progress(conn, name)
+        if total:
+            note = "ngành theo danh mục đã vào thống kê" if done == total else "chưa tính tỷ trọng ngành theo danh mục"
+            typer.echo(f"  {name:<11} danh mục ngành đã quét trọn: {done}/{total} — {note}")
     joint = r["joint_streak_days"]
     verdict = "ĐẠT" if joint >= target else f"chưa đạt (còn {target - joint} ngày)"
     typer.echo(f"Chuỗi ngày có ≥ {min_sources} nguồn cùng có dữ liệu: {joint}/{target} — {verdict}")
@@ -461,6 +504,15 @@ def backfill(source: str = typer.Option("careerlink", help="Nguồn có thẻ ti
     if hasattr(adapter, "parse_detail"):
         typer.echo(f"ngành (trang chi tiết): {reapply_detail_industries(conn, cfg, adapter)}")
     typer.echo(f"mục ngành của tin (đếm chia đều): {backfill_industry_labels(conn, cfg, source)}")
+    typer.echo(f"mục ngành theo trang danh mục đã gặp: {backfill_listing_industries(conn, cfg, source)}")
+
+
+@app.command("backfill-locations")
+def backfill_locations_cmd() -> None:
+    """Mọi nơi làm việc của tin (job_locations) từ bản gốc đã lưu, mọi nguồn — không request mạng."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    typer.echo(f"nơi làm việc: {backfill_locations(conn, cfg)}")
 
 
 @app.command()

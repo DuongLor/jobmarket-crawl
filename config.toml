@@ -44,6 +44,10 @@ deep_overlap_pages = 2
 detail_max_per_run = 10
 # Duyệt thêm trang theo ngành/tỉnh tự phát hiện trên trang (gắn được ngành cho tin)
 max_listings = 150
+# Ưu tiên trang danh mục (2026-11-09): danh sách chung không có ngành → cho nó vào vòng xoay như các danh mục (duyệt
+# lâu nhất trước) để ngân sách request dồn cho danh mục chưa quét; quét trọn mọi danh mục 1 vòng thì ngành theo danh
+# mục được tính tỷ trọng (chia đều). Tắt (false) = danh sách chung luôn đi đầu (phủ tin mới nhất, hết hạn nhanh hơn).
+category_first = true
 
 [sources.vieclam24h]
 # Khảo sát 2026-11-04: robots cho phép, bot tự khai danh tính nhận 200, không challenge. Trang danh sách nhúng dữ liệu

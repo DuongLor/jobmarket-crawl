@@ -18,6 +18,11 @@ c.page_header(ctx, "06", "Danh sách tin tuyển dụng",
               "Từng tin sau khi làm sạch (tin duy nhất). Bấm một dòng để xem mô tả; cột Link mở tin gốc.")  # fmt: skip
 
 
+def names(codes: tuple, fallback: str) -> str:
+    """Tin nhiều giá trị (nơi làm việc, danh mục) → hiện đủ tên, như trang nguồn; chưa có → `fallback`."""
+    return ", ".join(t[1] for t in codes) if codes else fallback
+
+
 def salary_text(df: pd.DataFrame) -> pd.Series:
     """Chuỗi lương hiển thị, tính cả cột một lượt (không lặp từng dòng — 35k tin)."""
 
@@ -55,11 +60,14 @@ if not c.empty_state(ctx):
             "id": df["id"].to_numpy(),
             "Tiêu đề": df["title"].to_numpy(),
             "Công ty": df["company_name"].fillna("—").to_numpy(),
-            "Địa phương": df["province_name"].to_numpy(),
+            # Tin ghi nhiều nơi / nhiều danh mục: hiện đủ (như trang nguồn), không chỉ mục đầu
+            "Địa phương": [names(codes, name)
+                           for codes, name in zip(df["province_codes"], df["province_name"], strict=True)],
             "Lương": salary_text(df).to_numpy(),
             "Kinh nghiệm": df["experience_name"].to_numpy(),
             "Cấp bậc": df["level_name"].to_numpy(),
-            "Ngành": df["industry_name"].to_numpy(),
+            "Danh mục": [names(codes, "—") for codes in df["category_codes"]],
+            "Nhóm ngành": df["industry_name"].to_numpy(),
             "Nguồn": df["source"].map(lambda s: c.SOURCE_NAMES.get(s, s)).to_numpy(),
             "Thấy lần đầu": df["first_seen_at"].str[:10].to_numpy(),
             "Link": df["url"].to_numpy(),
