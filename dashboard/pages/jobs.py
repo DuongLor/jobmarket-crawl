@@ -91,7 +91,8 @@ if not c.empty_state(ctx):
         if rows:
             job_id = int(chunk.iloc[rows[0]]["id"])
             job = ctx.conn.execute(
-                "SELECT title, url, skills_raw, salary_raw, description_text, dq_flags FROM job_posts WHERE id = ?",
+                "SELECT title, url, skills_raw, salary_raw, description_text, requirements_text, experience_raw, "
+                "experience_min_months, experience_max_months, dq_flags FROM job_posts WHERE id = ?",
                 (job_id,),
             ).fetchone()
             st.subheader(job["title"] or "—")
@@ -100,13 +101,20 @@ if not c.empty_state(ctx):
             st.write(
                 f"**Lương (nguyên văn):** {job['salary_raw'] or '—'} · **Kỹ năng/tag:** {job['skills_raw'] or '—'}"
             )
+            st.write(
+                f"**Kinh nghiệm:** {job['experience_raw'] or '—'}"
+                f" ({c.months_range(job['experience_min_months'], job['experience_max_months'])})"
+            )
             if job["dq_flags"]:
                 st.caption(f"Cờ chất lượng: {job['dq_flags']}")
             if job["description_text"]:
                 with st.expander("Mô tả công việc", expanded=True):
                     st.text(job["description_text"])
-            else:
-                st.caption("Nguồn này chỉ có thông tin trên trang danh sách — không có mô tả chi tiết.")
+            if job["requirements_text"]:
+                with st.expander("Yêu cầu công việc", expanded=True):
+                    st.text(job["requirements_text"])
+            if not (job["description_text"] or job["requirements_text"]):
+                st.caption("Chưa có mô tả/yêu cầu: tin chưa được đọc trang chi tiết, hoặc nguồn không cho đọc.")
         else:
             st.caption("Bấm vào một dòng để xem chi tiết tin.")
 

@@ -18,8 +18,17 @@ def tmp_cfg(cfg, tmp_path):
     raw = {**cfg.raw, "paths": {"data_dir": "data", "db_file": "data/test.db", "raw_dir": "data/raw"}}
     raw["crawl"] = {**cfg.crawl, "min_delay_seconds": 0}
     # test tầng danh sách không đọc trang chi tiết, không quét sâu, giữ thứ tự mặc định (test riêng tự bật)
+    # không đọc sitemap, không đụng thư mục Downloads thật của máy (test riêng tự bật)
     raw["sources"] = {
-        name: {**src, "detail_max_per_run": 0, "deep_pages_per_run": 0, "min_delay_seconds": 0, "category_first": False}
+        name: {
+            **src,
+            "detail_max_per_run": 0,
+            "deep_pages_per_run": 0,
+            "min_delay_seconds": 0,
+            "category_first": False,
+            "sitemap_max_per_run": 0,
+            "downloads_dir": "",
+        }
         for name, src in cfg.raw["sources"].items()
     }
     return dataclasses.replace(cfg, raw=raw, root=tmp_path)

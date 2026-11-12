@@ -27,5 +27,6 @@ class RawJob:
     posted_date: str | None = None
     deadline: str | None = None
     description_text: str | None = None
+    requirements_text: str | None = None  # yêu cầu công việc (đã xoá PII)
     raw_payload: dict = field(default_factory=dict)
     pii_removed: list[str] = field(default_factory=list)

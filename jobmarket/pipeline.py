@@ -5,6 +5,7 @@ import json
 import logging
 import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -13,8 +14,9 @@ from selectolax.lexbor import LexborHTMLParser
 from jobmarket import NORMALIZER_VERSION, __version__
 from jobmarket.config import Config
 from jobmarket.dedup import dedup_key
+from jobmarket.fetch import sitemap
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
-from jobmarket.normalize.experience import experience_code
+from jobmarket.normalize.experience import experience_code, experience_months
 from jobmarket.normalize.level import level_from_title
 from jobmarket.normalize.location import province_candidates, split_location
 from jobmarket.normalize.salary import parse_salary
@@ -336,9 +338,10 @@ def save_job(
             location_label_id, location_count, experience_label_id, level_label_id, level_from_title,
             skills_raw, salary_raw, salary_type, salary_from, salary_to, salary_currency, salary_tax,
             posted_date, deadline, status, description_text, raw_path, raw_sha256, dq_status, dq_flags,
-            dedup_key, first_seen_at, last_seen_at, first_run_id, last_run_id, normalizer_version, location_raw
+            dedup_key, first_seen_at, last_seen_at, first_run_id, last_run_id, normalizer_version, location_raw,
+            requirements_text, experience_raw, experience_min_months, experience_max_months
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?)""",
+                  ?, ?, ?, ?, ?, ?, ?)""",
         (
             source,
             job.source_job_id,
@@ -374,6 +377,9 @@ def save_job(
             run_id,
             NORMALIZER_VERSION,
             clean(job.location_raw) or None,
+            job.requirements_text,
+            clean(job.experience_raw) or None,
+            *experience_months(job.experience_raw),
         ),
     )
     store_locations(conn, cur.lastrowid, _location_ids(conn, source, location))
@@ -470,10 +476,10 @@ def backfill_locations(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
 
     CareerLink/CareerViet/TopCV: đọc lại thẻ tin; Việc Làm 24h: mã tỉnh trong `item`; VietJobs: dòng của file dataset
     (data/datasets/vietjobs/VietJobs.csv). Không đọc được → giữ nơi đầu tiên đã lưu."""
-    from jobmarket.sources import careerlink, careerviet, topcv, vietjobs
+    from jobmarket.sources import careerlink, careerviet, itviec, topcv, vietjobs
 
     raw_dir = cfg.path("raw_dir")
-    cards = {"careerlink": careerlink, "careerviet": careerviet, "topcv": topcv}
+    cards = {"careerlink": careerlink, "careerviet": careerviet, "itviec": itviec, "topcv": topcv}
     dataset = cfg.path("data_dir") / "datasets" / "vietjobs" / "VietJobs.csv"
     vj = vietjobs.locations_by_id(dataset) if dataset.exists() else {}
     rows = conn.execute("SELECT id, source, source_job_id, raw_path, location_label_id FROM job_posts").fetchall()
@@ -862,12 +868,24 @@ def run_paged(
     detail_limit = int(source_cfg.get("detail_max_per_run", 0))
     if hasattr(adapter, "parse_detail") and detail_limit > 0 and not stats.blocked:
         try:
-            scope["detail"] = enrich_details(conn, cfg, client, adapter, detail_limit)
+            scope["detail"] = enrich_details(conn, cfg, client, adapter, detail_limit, stats)
         except (Blocked, Disallowed) as exc:
             stats.blocked = f"{type(exc).__name__} (trang chi tiết): {exc}"
             progress.warning("Dừng đọc trang chi tiết (không vượt chặn): %s", stats.blocked)
         except Exception as exc:
             stats.errors.append(f"trang chi tiết: {type(exc).__name__}: {exc}")
+
+    # Tầng 3: tin chỉ thấy qua sitemap (nguồn khoá phân trang) — đọc trang chi tiết tin chưa có, ngân sách riêng
+    sitemap_limit = int(source_cfg.get("sitemap_max_per_run", 0))
+    sitemap_on = source_cfg.get("sitemap_url") and sitemap_limit > 0 and hasattr(adapter, "parse_detail_job")
+    if sitemap_on and not stats.blocked:
+        try:
+            scope["sitemap"] = discover_from_sitemap(conn, cfg, client, adapter, run_id, stats, sitemap_limit)
+        except (Blocked, Disallowed) as exc:
+            stats.blocked = f"{type(exc).__name__} (sitemap): {exc}"
+            progress.warning("Dừng phần sitemap (không vượt chặn): %s", stats.blocked)
+        except Exception as exc:
+            stats.errors.append(f"sitemap: {type(exc).__name__}: {exc}")
 
     status = "failed" if not pages_done else "partial" if (stats.blocked or stats.errors) else "success"
     if status != "failed" and source_cfg.get("expire_unseen", True):
@@ -917,6 +935,8 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
         flags.append("experience_unparsed")
     deadline = detail["deadline"]
     status = "expired" if deadline and deadline < now_iso()[:10] else "active"
+    experience_raw = clean(detail["experience"]) or None
+    exp_min, exp_max = experience_months(experience_raw)
     raw_store.save(
         cfg.path("raw_dir"), source, f"{row['id']}-detail",
         {"jsonld": detail["jsonld"], "pii_removed": detail["pii_removed"], "fetched_at": now_iso()},
@@ -929,7 +949,12 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
                    posted_date = COALESCE(?, posted_date),
                    deadline = CASE WHEN ? THEN COALESCE(deadline, ?) ELSE COALESCE(?, deadline) END,
                    status = CASE WHEN ? THEN status ELSE ? END,
-                   employment_type = ?, description_text = COALESCE(?, description_text), dq_flags = ?,
+                   employment_type = ?, description_text = COALESCE(?, description_text),
+                   requirements_text = COALESCE(?, requirements_text),
+                   experience_raw = COALESCE(?, experience_raw),
+                   experience_min_months = CASE WHEN ? IS NULL THEN experience_min_months ELSE ? END,
+                   experience_max_months = CASE WHEN ? IS NULL THEN experience_max_months ELSE ? END,
+                   dq_flags = ?,
                    dq_status = CASE WHEN dq_status = 'reject' THEN 'reject' WHEN ? = '' THEN 'ok' ELSE 'warn' END,
                    detail_fetched_at = ?
                WHERE id = ?""",
@@ -946,6 +971,12 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
                 status,
                 detail["employment_type"],
                 detail["description_text"],
+                detail.get("requirements_text"),
+                experience_raw,
+                experience_raw,
+                exp_min,
+                experience_raw,
+                exp_max,
                 ",".join(flags),
                 ",".join(flags),
                 now_iso(),
@@ -955,7 +986,33 @@ def apply_detail(conn: sqlite3.Connection, cfg: Config, source: str, row, detail
         _store_industry_labels(conn, row["id"], _industry_label_ids(conn, source, detail.get("industries") or []))
 
 
-def enrich_details(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, adapter, limit: int) -> dict[str, int]:
+# Lỗi tạm thời (timeout, 5xx) ở trang chi tiết: bỏ qua tin đó (lần sau đọc lại), đi tiếp. N trang LIỀN lỗi = máy chủ
+# đang trục trặc → dừng tầng này (lần chạy sau thử lại). Không phải tín hiệu chặn → không kích hoạt thời gian nghỉ.
+MAX_FAILURE_STREAK = 5
+
+
+class _FailureStreak:
+    def __init__(self, stats: RunStats, what: str):
+        self.stats, self.what, self.count = stats, what, 0
+
+    def fail(self, url: str, exc: Exception) -> None:
+        self.count += 1
+        self.stats.errors.append(f"{url}: {type(exc).__name__} (bỏ qua, lần sau đọc lại)")
+        if self.count >= MAX_FAILURE_STREAK:
+            raise RuntimeError(f"{self.what}: {self.count} trang liền lỗi mạng/máy chủ — dừng, lần chạy sau thử lại")
+
+    def ok(self) -> None:
+        self.count = 0
+
+
+def enrich_details(
+    conn: sqlite3.Connection,
+    cfg: Config,
+    client: PoliteClient,
+    adapter,
+    limit: int,
+    stats: RunStats | None = None,
+) -> dict[str, int]:
     """Tầng 2: đọc trang chi tiết (JSON-LD) của tối đa `limit` tin chưa bổ sung, mới nhất trước.
 
     Bổ sung ngành (ghi đè nhãn ngành suy từ trang danh mục — trang chi tiết là nguồn chính xác cho từng tin),
@@ -972,6 +1029,7 @@ def enrich_details(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, 
     # Trang không có JSON-LD: có thể thật sự không có, cũng có thể là nguồn đang hạn chế ngầm (HTTP 200, trang rỗng).
     # Chỉ đánh dấu "đã đọc" khi một trang sau đó đọc được (nguồn vẫn bình thường); 3 trang liền không có → dừng.
     no_jsonld_ids: list[int] = []
+    failures = _FailureStreak(stats or RunStats(), f"{adapter.NAME} trang chi tiết")
     for row in pending:
         try:
             html = client.get(row["url"])
@@ -986,7 +1044,12 @@ def enrich_details(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, 
                     )
                 counts["removed"] += 1
                 continue
-            raise
+            failures.fail(row["url"], exc)
+            continue
+        except httpx.HTTPError as exc:  # timeout / mất kết nối sau khi đã thử lại → bỏ qua tin này, lần sau đọc lại
+            failures.fail(row["url"], exc)
+            continue
+        failures.ok()
         if hasattr(adapter, "discover"):  # trang chi tiết liên kết các danh mục của tin → nhớ để lần sau duyệt
             with conn:
                 conn.executemany(
@@ -1009,6 +1072,153 @@ def enrich_details(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, 
         apply_detail(conn, cfg, adapter.NAME, row, detail)
         counts["enriched"] += 1
         progress.info("%s · trang chi tiết %d/%d đã đọc", adapter.NAME, counts["enriched"], len(pending))
+    return counts
+
+
+def refresh_sitemap(
+    conn: sqlite3.Connection, client: PoliteClient, adapter, root: str, max_files: int
+) -> dict[str, int]:
+    """Tải sitemap index `root` → sitemap tin (adapter.follow_sitemap) → ghi mọi URL tin vào `sitemap_jobs`."""
+    queue, seen, found = [root], set(), {}
+    while queue and len(seen) < max_files:
+        url = queue.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        is_index, locs = sitemap.parse(client.get(url))
+        if is_index:
+            queue.extend(u for u in locs if adapter.follow_sitemap(u))
+            continue
+        for loc in locs:
+            if (job_id := adapter.job_id_from_url(loc)) and raw_store.SAFE_ID.match(job_id):
+                found[job_id] = loc
+    now = now_iso()
+    with conn:
+        conn.executemany(
+            "INSERT INTO sitemap_jobs (source, source_job_id, url, first_listed_at, last_listed_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (source, source_job_id) DO UPDATE SET "
+            "url = excluded.url, last_listed_at = excluded.last_listed_at",
+            [(adapter.NAME, job_id, url, now, now) for job_id, url in found.items()],
+        )
+        conn.execute(
+            "INSERT INTO sitemap_fetches (source, fetched_at, files, urls) VALUES (?, ?, ?, ?) ON CONFLICT (source) "
+            "DO UPDATE SET fetched_at = excluded.fetched_at, files = excluded.files, urls = excluded.urls",
+            (adapter.NAME, now, len(seen), len(found)),
+        )
+    progress.info("%s · sitemap: %d file, %d URL tin", adapter.NAME, len(seen), len(found))
+    return {"files": len(seen), "urls": len(found)}
+
+
+def discover_from_sitemap(
+    conn: sqlite3.Connection, cfg: Config, client: PoliteClient, adapter, run_id: int, stats: RunStats, limit: int
+) -> dict[str, int]:
+    """Tầng 3: tin có trong sitemap mà chưa thấy ở trang danh sách → đọc trang chi tiết (tối đa `limit`, mã tin lớn
+    = mới hơn trước) và lưu như tin thấy ở danh sách. Sitemap chỉ tải lại sau `sitemap_refresh_hours`.
+
+    404/410 → 'gone' (không đọc lại). Trang không có dữ liệu tin: 3 trang liền → coi là bị hạn chế ngầm, dừng.
+    """
+    source_cfg = cfg.source(adapter.NAME)
+    counts = {"saved": 0, "gone": 0, "no_data": 0}
+    last = conn.execute("SELECT fetched_at FROM sitemap_fetches WHERE source = ?", (adapter.NAME,)).fetchone()
+    refresh_hours = float(source_cfg.get("sitemap_refresh_hours", 24))
+    if not last or datetime.fromisoformat(now_iso()) - datetime.fromisoformat(last[0]) >= timedelta(
+        hours=refresh_hours
+    ):
+        max_files = int(source_cfg.get("sitemap_max_files", 10))
+        counts.update(refresh_sitemap(conn, client, adapter, source_cfg["sitemap_url"], max_files))
+    pending = conn.execute(
+        "SELECT s.source_job_id, s.url FROM sitemap_jobs s WHERE s.source = ? AND s.checked_at IS NULL "
+        "AND NOT EXISTS (SELECT 1 FROM job_posts j WHERE j.source = s.source AND j.source_job_id = s.source_job_id) "
+        "ORDER BY length(s.source_job_id) DESC, s.source_job_id DESC LIMIT ?",
+        (adapter.NAME, int(limit)),
+    ).fetchall()
+
+    def mark(job_id: str, outcome: str) -> None:
+        conn.execute(
+            "UPDATE sitemap_jobs SET checked_at = ?, outcome = ? WHERE source = ? AND source_job_id = ?",
+            (now_iso(), outcome, adapter.NAME, job_id),
+        )
+
+    no_data: list[str] = []
+    failures = _FailureStreak(stats, f"{adapter.NAME} sitemap")
+    for job_id, url in pending:
+        try:
+            html = client.get(url)
+        except (Blocked, Disallowed):
+            raise
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in (404, 410):
+                failures.fail(url, exc)
+                continue
+            with conn:
+                mark(job_id, "gone")
+            counts["gone"] += 1
+            continue
+        except httpx.HTTPError as exc:  # timeout / mất kết nối sau khi đã thử lại → bỏ qua tin này, lần sau đọc lại
+            failures.fail(url, exc)
+            continue
+        failures.ok()
+        job = adapter.parse_detail_job(html, url)
+        if job is None:
+            no_data.append(job_id)
+            if len(no_data) >= 3:
+                raise Blocked("3 trang chi tiết (sitemap) liền không có dữ liệu tin — nghi nguồn đang hạn chế truy cập")
+            continue
+        with conn:
+            for earlier in no_data:  # nguồn vẫn trả dữ liệu bình thường → các trang trước thật sự không có tin
+                mark(earlier, "no_data")
+            counts["no_data"] += len(no_data)
+            no_data.clear()
+            save_job(conn, cfg, adapter.NAME, adapter.PROVIDES, job, run_id, stats)
+            mark(job_id, "saved")
+        # Cùng trang đó là trang chi tiết → ghi luôn mô tả/yêu cầu/kinh nghiệm, đánh dấu đã đọc (tầng 2 không đọc lại)
+        detail = adapter.parse_detail(html) if hasattr(adapter, "parse_detail") else None
+        row = conn.execute(
+            "SELECT id, dq_flags, industry_label_id FROM job_posts WHERE source = ? AND source_job_id = ?",
+            (adapter.NAME, job.source_job_id),
+        ).fetchone()
+        if detail and row:
+            apply_detail(conn, cfg, adapter.NAME, row, detail)
+        counts["saved"] += 1
+        progress.info("%s · sitemap: trang chi tiết %d/%d đã đọc", adapter.NAME, counts["saved"], len(pending))
+    counts["pending_left"] = conn.execute(
+        "SELECT COUNT(*) FROM sitemap_jobs s WHERE s.source = ? AND s.checked_at IS NULL "
+        "AND NOT EXISTS (SELECT 1 FROM job_posts j WHERE j.source = s.source AND j.source_job_id = s.source_job_id)",
+        (adapter.NAME,),
+    ).fetchone()[0]
+    return counts
+
+
+def backfill_experience_requirements(conn: sqlite3.Connection) -> dict[str, int]:
+    """Tin đã có (trước migration 011): chữ kinh nghiệm + khoảng tháng từ nhãn kinh nghiệm đã lưu; tách yêu cầu khỏi mô
+    tả CareerLink đã đọc. Không request mạng, chỉ điền ô đang trống."""
+    from jobmarket.sources.careerlink import split_requirements
+
+    counts = {"experience": 0, "requirements": 0}
+    rows = conn.execute(
+        "SELECT j.id, l.raw_label FROM job_posts j JOIN labels l ON l.id = j.experience_label_id "
+        "WHERE j.experience_raw IS NULL"
+    ).fetchall()
+    with conn:
+        for job_id, raw in rows:
+            low, high = experience_months(raw)
+            conn.execute(
+                "UPDATE job_posts SET experience_raw = ?, experience_min_months = ?, experience_max_months = ? "
+                "WHERE id = ?",
+                (clean(raw) or None, low, high, job_id),
+            )
+            counts["experience"] += 1
+        for job_id, text in conn.execute(
+            "SELECT id, description_text FROM job_posts WHERE source = 'careerlink' "
+            "AND description_text IS NOT NULL AND requirements_text IS NULL"
+        ).fetchall():
+            description, requirements = split_requirements(text)
+            if requirements:
+                conn.execute(
+                    "UPDATE job_posts SET description_text = ?, requirements_text = ? WHERE id = ?",
+                    (description, requirements, job_id),
+                )
+                counts["requirements"] += 1
     return counts
 
 

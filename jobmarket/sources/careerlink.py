@@ -107,7 +107,25 @@ def parse_detail(html: str) -> dict | None:
     `industry` của CareerLink là danh sách mục cách nhau dấu phẩy, xếp theo MÃ danh mục tăng dần (không có mục chính —
     kiểm 8/8 tin nhiều mục, 2026-11-09). None nếu không có."""
     posting = jsonld.find_job_posting(html)
-    return jsonld.parse_job_posting(posting) if posting else None
+    if not posting:
+        return None
+    detail = jsonld.parse_job_posting(posting)
+    detail["description_text"], detail["requirements_text"] = split_requirements(detail["description_text"])
+    return detail
+
+
+# Mô tả JSON-LD của CareerLink gộp "mô tả công việc" + "* Kinh nghiệm / Kỹ năng chi tiết:" (yêu cầu) — kiểm 2026-11-11
+_REQUIREMENTS_HEADING = re.compile(r"^[*•\-\s]*Kinh nghiệm\s*/\s*Kỹ năng chi tiết\s*:?\s*$", re.M | re.I)
+
+
+def split_requirements(text: str | None) -> tuple[str | None, str | None]:
+    """→ (mô tả, yêu cầu). Không thấy dòng tiêu đề yêu cầu → giữ nguyên toàn bộ là mô tả, yêu cầu None."""
+    if not text:
+        return text, None
+    match = _REQUIREMENTS_HEADING.search(text)
+    if not match:
+        return text, None
+    return text[: match.start()].strip() or None, text[match.end() :].strip() or None
 
 
 def parse_listing(html: str, industry_label: str | None) -> list[RawJob]:

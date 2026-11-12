@@ -14,6 +14,8 @@ import json
 import re
 from urllib.parse import urljoin
 
+from jobmarket.normalize.text import clean
+from jobmarket.sources import jsonld
 from jobmarket.sources.base import ListingPage, RawJob
 from jobmarket.timeutil import from_timestamp
 
@@ -138,6 +140,30 @@ def _job_url(html: str, item: dict) -> str | None:
     return urljoin(BASE, match.group(1)) if match else None
 
 
+def _raw_job(item: dict, names: dict[str, dict], url: str | None, industry_label: str | None) -> RawJob:
+    """Một tin (cùng cấu trúc `item` ở trang danh sách và trang chi tiết) → RawJob — một cách đọc cho cả hai."""
+    provinces = [names["province"].get(p) for p in item.get("province_ids") or []]
+    occupations = item.get("occupation_ids_main") or []
+    employer = item.get("employer_info") or {}
+    return RawJob(
+        source_job_id=str(item["id"]),
+        url=url,
+        title=item.get("title"),
+        company_name=employer.get("name"),
+        salary_raw=salary_text(item),
+        location_raw=", ".join(p for p in provinces if p) or None,
+        experience_raw=names["experience"].get(str(item.get("experience_range"))),
+        level_raw=names["level"].get(str(item.get("level_requirement"))),
+        # Ngành = NGHỀ chính (chức năng công việc, vd "Bán hàng - Kinh doanh"), cùng cách phân loại với
+        # CareerLink/VietJobs. `field_ids_main` là lĩnh vực của công ty (vd bán hàng ở Coca-Cola → "Thực
+        # phẩm - Đồ uống") → chỉ giữ trong bản gốc.
+        industry_label=(names["occupation"].get(occupations[0]) if occupations else None) or industry_label,
+        posted_date=_local_date(item.get("created_at")),
+        deadline=_local_date(item.get("resume_apply_expired")),
+        raw_payload={"item": _payload(item)},
+    )
+
+
 def parse_listing(html: str, industry_label: str | None) -> list[RawJob]:
     data = _data(html)
     if not data:
@@ -149,26 +175,69 @@ def parse_listing(html: str, industry_label: str | None) -> list[RawJob]:
         if not job_id or job_id in seen:
             continue
         seen.add(job_id)
-        provinces = [names["province"].get(p) for p in item.get("province_ids") or []]
-        occupations = item.get("occupation_ids_main") or []
-        employer = item.get("employer_info") or {}
-        jobs.append(
-            RawJob(
-                source_job_id=job_id,
-                url=_job_url(html, item),
-                title=item.get("title"),
-                company_name=employer.get("name"),
-                salary_raw=salary_text(item),
-                location_raw=", ".join(p for p in provinces if p) or None,
-                experience_raw=names["experience"].get(str(item.get("experience_range"))),
-                level_raw=names["level"].get(str(item.get("level_requirement"))),
-                # Ngành = NGHỀ chính (chức năng công việc, vd "Bán hàng - Kinh doanh"), cùng cách phân loại với
-                # CareerLink/VietJobs. `field_ids_main` là lĩnh vực của công ty (vd bán hàng ở Coca-Cola → "Thực
-                # phẩm - Đồ uống") → chỉ giữ trong bản gốc.
-                industry_label=(names["occupation"].get(occupations[0]) if occupations else None) or industry_label,
-                posted_date=_local_date(item.get("created_at")),
-                deadline=_local_date(item.get("resume_apply_expired")),
-                raw_payload={"item": _payload(item)},
-            )
-        )
+        jobs.append(_raw_job(item, names, _job_url(html, item), industry_label))
     return jobs
+
+
+# --- Sitemap (2026-11-09): robots.txt khai `Sitemap: …/sitemap-index.xml`; sitemap tin `daily/job-0.xml` → các file
+# `job/tintuyendung-<n>.xml` (≤ 5.000 URL/file, cập nhật hằng ngày). Trang chi tiết nhúng cùng cấu trúc `item` như
+# trang danh sách (`jobDetailHiddenContact.data`, kèm bảng tra tên) → đọc đúng như trang danh sách.
+_JOB_SITEMAP = re.compile(r"/sitemap/(daily/job-\d+|job/tintuyendung-\d+)\.xml$")
+_JOB_URL_ID = re.compile(r"^https://vieclam24h\.vn/[^?#]*?id(\d+)\.html$")
+
+
+def follow_sitemap(url: str) -> bool:
+    """Sitemap con cần đọc trong sitemap index (chỉ sitemap tin, bỏ blog/nhà tuyển dụng/trang SEO)."""
+    return bool(_JOB_SITEMAP.search(url))
+
+
+def job_id_from_url(url: str) -> str | None:
+    match = _JOB_URL_ID.match(url)
+    return match.group(1) if match else None
+
+
+def _detail_item(html: str) -> tuple[dict, dict] | None:
+    data = _data(html)
+    if not data:
+        return None
+    api = data.get("props", {}).get("initialState", {}).get("api", {})
+    item = (api.get("jobDetailHiddenContact") or {}).get("data")
+    if not isinstance(item, dict) or not item.get("id"):
+        return None
+    return item, data
+
+
+def parse_detail_job(html: str, url: str) -> RawJob | None:
+    """Trang chi tiết → RawJob; trang không có dữ liệu tin (đã gỡ, đổi cấu trúc, bị hạn chế ngầm) → None."""
+    found = _detail_item(html)
+    return _raw_job(found[0], _lookups(found[1]), url, None) if found else None
+
+
+# Phần "yêu cầu" của tin nằm rải ở các trường này (bản _html ưu tiên — giữ xuống dòng)
+_REQUIREMENT_FIELDS = ("job_requirement", "skill_requirement", "other_requirement")
+
+
+def parse_detail(html: str) -> dict | None:
+    """Trang chi tiết → trường cho `pipeline.apply_detail`: mô tả, yêu cầu công việc, kinh nghiệm (chữ nguồn ghi, vd
+    "1 năm"), hạn nộp… — đọc cùng `item` + bảng tra như trang danh sách (ngành = nghề chính, ngày đăng = created_at)."""
+    found = _detail_item(html)
+    if not found:
+        return None
+    item, data = found
+    job = _raw_job(item, _lookups(data), None, None)
+    description, removed = jsonld.html_to_text(item.get("description_html") or item.get("description"))
+    parts = [item.get(f"{name}_html") or item.get(name) for name in _REQUIREMENT_FIELDS]
+    requirements, removed_req = jsonld.html_to_text("<br>".join(p for p in parts if isinstance(p, str) and p.strip()))
+    posting = jsonld.find_job_posting(html) or {}
+    return {
+        "industry": job.industry_label,
+        "industries": [],
+        "experience": job.experience_raw,
+        "posted_date": job.posted_date,
+        "deadline": job.deadline,
+        "employment_type": clean(str(posting.get("employmentType") or "")) or None,
+        "description_text": description,
+        "requirements_text": requirements,
+        "pii_removed": removed + removed_req,
+        "jsonld": {"item": _payload(item)},  # bản gốc: chỉ danh sách trắng, không liên hệ
+    }

@@ -15,12 +15,30 @@ stop_error_rate = 0.2
 # Tin không còn thấy trên nguồn quá N ngày → trạng thái 'expired' (chỉ đánh dấu sau lần chạy có dữ liệu). Chỉ áp
 # dụng cho nguồn KHÔNG quét sâu (deep_pages_per_run = 0); nguồn quét sâu hết hạn theo vòng quét trọn.
 expire_unseen_days = 14
+# Nguồn chặn ta (challenge/403/429/trang rỗng nghi hạn chế ngầm) N lần chạy liền → nghỉ hours × 2^(N-1) giờ, tối đa
+# max_hours, tính từ lần bị chặn cuối. `run --force` và `start --now` KHÔNG bỏ qua được (2026-11-09: CareerLink bị chạy
+# 3 lần cách 15–30 phút bằng --force → bị chặn ngay trang đầu). 0 = tắt.
+blocked_cooldown_hours = 6
+blocked_cooldown_max_hours = 24
+
+# QUY TẮC THU THẬP (2026-11-09) — chi tiết: .claude/agents/jobmarket-dev.md
+#   Xanh  (tự làm): robots cho phép + User-Agent trung thực + kênh site công bố cho máy (sitemap, JSON-LD,
+#                   __NEXT_DATA__); nhịp = max(min_delay_seconds, Crawl-delay của robots).
+#   Vàng  (bạn duyệt từng nguồn): trang bạn tự mở/tự lưu (import-html, userscript), bộ dữ liệu công khai, xin phép/API
+#                   đối tác, đổi thư viện HTTP (User-Agent vẫn trung thực).
+#   Đỏ    (không làm): giả User-Agent/dấu vân tay TLS trình duyệt, trình duyệt tự động giải challenge, điều khiển trình
+#                   duyệt của bạn để tự động duyệt site đã chặn, proxy xoay vòng, giải captcha, đăng nhập, đường dẫn
+#                   robots cấm.
 
 [sources.topcv]
 # TẮT 2026-11-03: TopCV chặn bot tự khai danh tính (Cloudflare challenge) — dữ liệu TopCV chỉ vào qua
 # `import-html` (trang bạn tự lưu). Không đổi User-Agent để né chặn. Xem docs/spike-0.md.
 enabled = false
 start_url = "https://www.topcv.vn/tim-viec-lam-moi-nhat"
+# Userscript `scripts/topcv-save.user.js` (mức Vàng — chỉ trang BẠN tự mở, bấm nút hoặc bật tự lưu): tải trang về đây
+# với tên `jobmarket-topcv-*.html`; `start`/`watch`/`import-html` chuyển các file đó vào data/inbox/topcv rồi nạp.
+# Chỉ đụng file đúng tiền tố đó. Rỗng = tắt.
+downloads_dir = "~/Downloads"
 
 # Nguồn có phân trang: mỗi đêm duyệt tối đa `max_pages` trang mỗi danh sách, dừng sớm khi
 # `stop_after_known_pages` trang liên tiếp không có tin mới. Lần đầu muốn lấy nhiều: `run --max-pages 40`.
@@ -32,6 +50,9 @@ start_url = "https://www.careerlink.vn/vieclam/list"
 # (40 danh sách + 10 chi tiết), cách nhau ≥ 4 giờ (`start` hoặc Task Scheduler — chọn một), dừng ngay khi phát hiện.
 min_delay_seconds = 10
 max_requests = 40
+# `run --full` (quét trọn, không giới hạn số request): nghỉ 15 giây/request = 36 request/9 phút, dưới ngưỡng
+# hạn chế đo được (~55/9 phút). Vẫn bị chặn → dừng + nghỉ (blocked_cooldown_*).
+full_min_delay_seconds = 15
 max_pages = 10
 stop_after_known_pages = 3
 # Quét sâu: sau phần đầu danh sách, đọc tiếp N trang từ chỗ dừng lần trước (crawl_listings.resume_page) → danh sách
@@ -66,6 +87,21 @@ max_listings = 60
 # Có hạn nộp từng tin → trạng thái theo hạn nộp; không đánh dấu hết hạn vì "không thấy" (danh sách chỉ phân trang
 # ~34 trang mỗi nghề, không phủ trọn mỗi lần).
 expire_unseen = false
+# Sitemap (2026-11-09, mức Xanh): robots khai sitemap; sitemap tin ~4 file × 5.000 URL, cập nhật hằng ngày; trang chi
+# tiết (bot tự khai danh tính nhận 200) có đủ trường như trang danh sách. Tin chưa thấy ở danh sách → đọc trang chi
+# tiết, mã tin lớn (mới) trước. Đính chính 2026-11-11: trước ghi "robots Crawl-delay 5" — kiểm lại thấy `Crawl-delay: 5`
+# chỉ trong nhóm SemrushBot/AhrefsBot; nhóm `*` (bot này) KHÔNG khai nhịp.
+# `run --full`: 5 giây/request = đúng nhịp site đòi ở bot SEO lớn (~15.900 trang chi tiết: 44 → ~22 giờ). Chạy thường giữ 10.
+full_min_delay_seconds = 5
+# Trang chi tiết (2026-11-11): mô tả + yêu cầu công việc chỉ có ở trang chi tiết → đọc cho tin thấy ở trang danh sách
+# (tin từ sitemap đã ghi luôn khi lưu). `run --full` = không giới hạn.
+detail_max_per_run = 60
+sitemap_url = "https://vieclam24h.vn/file/sitemap/sitemap-index.xml"
+sitemap_refresh_hours = 24
+sitemap_max_files = 10
+# 2026-11-11: 100 → 300 (user: "quét nhiều tin lên"). ~50 phút/lần ở 10 giây/request; ~15.700 tin chưa thấy → ~9 ngày
+# nếu chạy 6 lần/ngày. Chưa thấy bị chặn ở trang chi tiết (11/11: ~1.100 trang liền không lỗi). Bị chặn → tự nghỉ.
+sitemap_max_per_run = 300
 
 [sources.careerviet]
 # Khảo sát 2026-11-04: robots (User-agent: *) chỉ cấm /vi/jobs/*, /api/*… → trang danh sách được phép; bot tự khai danh
@@ -74,12 +110,30 @@ expire_unseen = false
 enabled = true
 start_url = "https://careerviet.vn/viec-lam/tat-ca-viec-lam-vi.html"
 min_delay_seconds = 10
-max_requests = 40
+# 2026-11-11: 40/25 → 90/75 (user: "quét nhiều tin lên"). Chưa từng bị chặn/hạn chế; 370 trang → vòng quét trọn
+# ~5 lần chạy thay vì ~15. ~15 phút/lần.
+max_requests = 90
 max_pages = 10
 stop_after_known_pages = 3
-deep_pages_per_run = 25
+deep_pages_per_run = 75
 deep_overlap_pages = 2
 max_listings = 5  # chưa dùng: CareerViet chỉ có 1 danh sách chung (không phát hiện danh mục)
+
+[sources.itviec]
+# Khảo sát 2026-11-10 (mức Xanh): robots `Allow: /`, bot tự khai danh tính nhận 200 ở mọi trang danh sách + chi tiết.
+# Cả site ~620 tin IT, 20 tin/trang, ~31 trang → mỗi lần chạy quét trọn (phần đầu + quét sâu) → hết hạn theo vòng quét.
+# Không có lương (ẩn, cần đăng nhập) và cấp bậc; kinh nghiệm JSON-LD không đáng tin → bỏ (xem sources/itviec.py).
+enabled = true
+start_url = "https://itviec.com/it-jobs"
+min_delay_seconds = 10
+max_requests = 40
+max_pages = 5
+stop_after_known_pages = 3
+deep_pages_per_run = 30
+deep_overlap_pages = 1
+max_listings = 1
+# Trang chi tiết (JSON-LD): ngày đăng chính xác, hạn nộp → trạng thái, mô tả. Lần đầu ~620 tin ≈ 21 lần chạy.
+detail_max_per_run = 60  # 2026-11-11: 30 → 60 (~620 tin ≈ 11 lần chạy)
 
 [sources.jobsgo]
 # TẮT 2026-11-03: lần chạy thật bị 403 challenge ngay trang đầu (khảo sát bằng curl trước đó vẫn 200).

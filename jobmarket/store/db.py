@@ -17,7 +17,8 @@ def now_iso() -> str:
 
 def connect(db_file: Path) -> sqlite3.Connection:
     db_file.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_file)
+    # Chờ tối đa 60 giây khi DB đang bị tiến trình khác ghi (`run --full` mỗi nguồn một cửa sổ chạy song song)
+    conn = sqlite3.connect(db_file, timeout=60)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

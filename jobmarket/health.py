@@ -42,6 +42,42 @@ def close_stale_runs(
     return cur.rowcount
 
 
+def _was_blocked(error_sample: str | None) -> bool:
+    """Lần chạy bị nguồn chặn: ghi chú đầu tiên là `Blocked…` (challenge, 403, 429, trang rỗng nghi hạn chế ngầm)."""
+    try:
+        notes = json.loads(error_sample or "[]")
+    except ValueError:
+        return False
+    return bool(notes) and isinstance(notes[0], str) and notes[0].startswith("Blocked")
+
+
+def blocked_cooldown(
+    conn: sqlite3.Connection, source: str, hours: float, max_hours: float
+) -> tuple[datetime, int] | None:
+    """Nguồn vừa chặn ta N lần chạy liền → nghỉ `hours` × 2^(N-1) giờ (tối đa `max_hours`) tính từ lần bị chặn cuối.
+
+    → (nghỉ tới lúc nào, N) nếu còn trong thời gian nghỉ, ngược lại None. `--force`/`--now` KHÔNG bỏ qua được: chạy
+    lại dồn khi đang bị chặn chỉ kéo dài lệnh chặn (CareerLink 2026-11-09: 3 lần cách 15–30 phút → bị chặn ngay trang
+    đầu). Lần chạy bị ngắt mà chưa lưu tin nào không tính (như khoảng cách giữa 2 lần chạy).
+    """
+    if hours <= 0:
+        return None
+    rows = conn.execute(
+        "SELECT COALESCE(finished_at, started_at), error_sample FROM runs WHERE source = ? "
+        "AND NOT (status = 'interrupted' AND posts_new + posts_updated = 0) ORDER BY started_at DESC LIMIT 10",
+        (source,),
+    ).fetchall()
+    streak = 0
+    for _, sample in rows:
+        if not _was_blocked(sample):
+            break
+        streak += 1
+    if not streak:
+        return None
+    until = datetime.fromisoformat(rows[0][0]) + timedelta(hours=min(hours * 2 ** (streak - 1), max_hours))
+    return (until, streak) if datetime.fromisoformat(now_iso()) < until else None
+
+
 def data_days(conn: sqlite3.Connection, source: str) -> set[date]:
     rows = conn.execute(f"SELECT DISTINCT date(started_at) FROM runs WHERE source = ? AND {DATA_RUN}", (source,))
     return {date.fromisoformat(r[0]) for r in rows if r[0]}

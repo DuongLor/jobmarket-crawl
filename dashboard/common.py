@@ -31,6 +31,7 @@ SOURCE_NAMES = {
     "vietjobs": "VietJobs",
     "vieclam24h": "Việc Làm 24h",
     "careerviet": "CareerViet",
+    "itviec": "ITviec",
 }
 # Bộ dữ liệu lịch sử (ảnh chụp một lần, không có ngày đăng từng tin) — KHÔNG trộn với dữ liệu crawl hằng ngày
 HISTORICAL_SOURCES = {"vietjobs"}
@@ -293,6 +294,25 @@ def months_note(months: int) -> str:
         f"Chưa đủ dữ liệu để kết luận xu hướng: đã có {months}/6 tháng thu thập trọn (tháng bắt đầu thu thập giữa "
         "chừng không tính; tin đăng trước khi bắt đầu thu thập không tính)."
     )
+
+
+def _months_text(months: int) -> str:
+    if months % 12 == 0:
+        return f"{months // 12} năm"
+    return f"{months} tháng" if months < 12 else f"{months} tháng (~{months / 12:.1f} năm)".replace(".", ",")
+
+
+def months_range(low: int | None, high: int | None) -> str:
+    """Khoảng kinh nghiệm (tháng) → chữ: (12, 24) → "1 năm – 2 năm"; (36, None) → "từ 3 năm"."""
+    if low is None and high is None:
+        return "chưa rõ"
+    if low == 0 and high == 0:
+        return "không yêu cầu"
+    if high is None:
+        return f"từ {_months_text(low)}"
+    if not low:
+        return f"dưới {_months_text(high)}"
+    return f"{_months_text(low)} – {_months_text(high)}"
 
 
 def window_comparable(ctx: Context, days: int) -> bool:

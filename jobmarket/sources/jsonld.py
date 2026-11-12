@@ -86,11 +86,20 @@ def _location(posting: dict) -> str | None:
     return ", ".join(names) or None
 
 
+def html_to_text(html: str | None) -> tuple[str | None, list[str]]:
+    """HTML mô tả/yêu cầu → chữ nhiều dòng, đã xoá SĐT/email (pii.scrub). Rỗng → (None, [])."""
+    if not html:
+        return None, []
+    text = LexborHTMLParser(f"<div>{html}</div>").body.text(separator="\n")
+    text = re.sub(r"[ \t\xa0]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text, removed = scrub(re.sub(r"\n{3,}", "\n\n", text).strip())
+    return text or None, removed
+
+
 def parse_job_posting(posting: dict) -> dict:
     """Trường chuẩn hoá-sẵn-sàng từ khối JobPosting. `industries`: danh sách mục ngành (dấu phẩy), mục đầu = chính."""
-    description = posting.get("description") or ""
-    text = LexborHTMLParser(f"<div>{description}</div>").body.text(separator="\n") if description else ""
-    text, removed = scrub(re.sub(r"\n{3,}", "\n\n", text).strip())
+    text, removed = html_to_text(posting.get("description"))
     raw_industry = posting.get("industry")
     raw_industry = ", ".join(map(str, raw_industry)) if isinstance(raw_industry, list) else str(raw_industry or "")
     industries = [clean(part) for part in raw_industry.split(",") if clean(part)]
@@ -117,7 +126,8 @@ def parse_job_posting(posting: dict) -> dict:
         "posted_date": str(posting.get("datePosted") or "")[:10] or None,
         "deadline": str(posting.get("validThrough") or "")[:10] or None,
         "employment_type": clean(str(posting.get("employmentType") or "")) or None,
-        "description_text": text or None,
+        "description_text": text,
+        "requirements_text": None,  # JSON-LD không tách yêu cầu; adapter tách nếu trang có
         "pii_removed": removed,
         "jsonld": {k: v for k, v in posting.items() if k != "description"},
     }

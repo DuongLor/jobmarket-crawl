@@ -14,6 +14,8 @@ import httpx
 from jobmarket.fetch.robots import RobotsRules
 
 MAX_REDIRECTS = 5
+# robots.txt đòi nghỉ lâu hơn mức này giữa 2 request → coi như site không muốn bot đọc (một lần chạy sẽ kéo hàng giờ)
+MAX_CRAWL_DELAY = 120
 
 CHALLENGE_MARKERS = ("just a moment", "cf-chl", "enable javascript and cookies", "captcha")
 
@@ -39,6 +41,7 @@ class PoliteClient:
             transport=transport,
         )
         self._robots: dict[str, RobotsRules] = {}
+        self._host_delay: dict[str, float] = {}  # max(min_delay, Crawl-delay của robots) theo host
         self._last_request_at: dict[str, float] = {}
         self.requests_made = 0
 
@@ -48,7 +51,7 @@ class PoliteClient:
     def _wait_turn(self, host: str) -> None:
         last = self._last_request_at.get(host)
         if last is not None:
-            delay = self.min_delay - (time.monotonic() - last)
+            delay = self._host_delay.get(host, self.min_delay) - (time.monotonic() - last)
             if delay > 0:
                 time.sleep(delay)
         self._last_request_at[host] = time.monotonic()
@@ -68,16 +71,34 @@ class PoliteClient:
             else:
                 rules = RobotsRules(resp.text.splitlines() if resp.status_code == 200 else [])
             self._robots[origin] = rules
+            self._host_delay[parts.netloc] = max(self.min_delay, rules.crawl_delay(self.user_agent) or 0.0)
         return self._robots[origin]
 
     def _check(self, url: str) -> None:
-        if not self._robots_for(url).can_fetch(self.user_agent, url):
+        rules = self._robots_for(url)
+        if not rules.can_fetch(self.user_agent, url):
             raise Disallowed(url)
+        if (rules.crawl_delay(self.user_agent) or 0) > MAX_CRAWL_DELAY:
+            raise Disallowed(f"{url} (robots Crawl-delay > {MAX_CRAWL_DELAY} giây)")
 
     def get(self, url: str) -> str:
         self._check(url)
         for attempt in range(self.max_retries + 1):
-            resp = self._fetch_following_redirects(url)
+            last_try = attempt >= self.max_retries
+            backoff = self.min_delay * (2 ** (attempt + 1))
+            # Lỗi tạm thời phía máy chủ/mạng (timeout, mất kết nối, 502/504 — không phải tín hiệu chặn): nghỉ lâu dần
+            # rồi thử lại; hết lượt → ném lỗi thường để bộ chạy bỏ qua đúng trang đó (Việc Làm 24h 11/11: 1 ReadTimeout
+            # từng làm dừng cả 14.700 trang sitemap còn lại).
+            try:
+                resp = self._fetch_following_redirects(url)
+            except httpx.TransportError:
+                if last_try:
+                    raise
+                time.sleep(backoff)
+                continue
+            if resp.status_code in (502, 504) and not last_try:
+                time.sleep(backoff)
+                continue
             body = resp.text
             if is_challenge(resp.status_code, body):
                 raise Blocked(f"{resp.status_code} challenge at {url}")

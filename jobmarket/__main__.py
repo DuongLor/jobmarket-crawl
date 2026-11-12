@@ -1,8 +1,11 @@
 """CLI: python -m jobmarket <lệnh>"""
 
+import copy
+import dataclasses
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -16,6 +19,7 @@ from jobmarket import audit, health, labels, mysql_mirror, report, stats
 from jobmarket.config import DB_ENV, PROJECT_ROOT, load_config
 from jobmarket.fetch.client import Blocked, Disallowed, PoliteClient
 from jobmarket.pipeline import (
+    backfill_experience_requirements,
     backfill_industry_labels,
     backfill_listing_industries,
     backfill_locations,
@@ -28,7 +32,7 @@ from jobmarket.pipeline import (
     run_paged,
     run_topcv,
 )
-from jobmarket.sources import careerlink, careerviet, jobsgo, vieclam24h, vietjobs
+from jobmarket.sources import careerlink, careerviet, itviec, jobsgo, vieclam24h, vietjobs
 from jobmarket.sources.clean_csv import import_clean_csv
 from jobmarket.store.db import init_db
 from jobmarket.timeutil import now_local
@@ -66,7 +70,13 @@ def _client_for(cfg, name: str) -> PoliteClient:
     return PoliteClient({**cfg.crawl, **({"min_delay_seconds": delay} if delay else {})})
 
 
-PAGED_SOURCES = {"careerlink": careerlink, "jobsgo": jobsgo, "vieclam24h": vieclam24h, "careerviet": careerviet}
+PAGED_SOURCES = {
+    "careerlink": careerlink,
+    "jobsgo": jobsgo,
+    "vieclam24h": vieclam24h,
+    "careerviet": careerviet,
+    "itviec": itviec,
+}
 
 
 def run_source(conn, cfg, client, name: str, max_pages: int | None) -> int:
@@ -109,20 +119,33 @@ def run(
         3.5, help="Bỏ qua nguồn đã chạy trong N giờ qua (CareerLink hạn chế ~3,5 giờ; tránh dồn với `start`)"
     ),
     force: bool = typer.Option(False, "--force", help="Chạy dù chưa đủ khoảng cách (chỉ khi biết chắc)"),
+    full: bool = typer.Option(
+        False,
+        "--full",
+        help="Quét TRỌN site: bỏ giới hạn request/trang/trang chi tiết/sitemap mỗi lần chạy, bỏ khoảng cách giữa 2 "
+        "lần chạy. Vẫn giữ nhịp nghỉ (full_min_delay_seconds), robots.txt, dừng + nghỉ khi bị chặn. "
+        "Không đồng bộ MySQL.",
+    ),
 ) -> None:
     """Thu thập + chuẩn hoá. Exit code 1 nếu có nguồn thất bại (để Task Scheduler biết)."""
     cfg = load_config()
     names = [n for n, s in cfg.raw["sources"].items() if s.get("enabled")] if source == "all" else [source]
     if source != "all" and not cfg.source(source).get("enabled"):
         raise typer.BadParameter(f"Nguồn {source} đang tắt trong config.toml")
+    if full:
+        cfg = full_config(cfg, names)
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
-    health.close_stale_runs(conn, older_than_minutes=STALE_RUN_MINUTES)
+    # Một nguồn cụ thể: chỉ dọn lần chạy kẹt của nguồn đó — không đụng `run --full` của nguồn khác đang chạy song song
+    health.close_stale_runs(conn, source=None if source == "all" else source, older_than_minutes=STALE_RUN_MINUTES)
     show_progress(echo)
     failed = crawled = False
     for name in names:
+        if rest := _cooldown_note(conn, cfg, name):
+            echo(f"{name}: bỏ qua — {rest}")
+            continue
         due, next_at = _crawl_due(conn, name, min_hours)
-        if not (due or force):
+        if not (due or force or full):
             skipped = f"đã chạy trong {min_hours:g} giờ qua; lần tới {next_at}"
             echo(f"{name}: bỏ qua — {skipped} (thêm --force để chạy ngay)")
             continue
@@ -147,10 +170,31 @@ def run(
         typer.echo(json.dumps({k: row[k] for k in keys} | {"requests_made": client.requests_made}, ensure_ascii=False))
         failed |= row["status"] == "failed"
         crawled = True
-    if crawled:
+    if (
+        crawled and not full
+    ):  # --full: nhiều cửa sổ song song, mỗi lần đồng bộ dựng lại cả schema → chạy tay `mysql-sync`
         _mirror_mysql(cfg, conn, typer.echo)
     if failed:
         raise typer.Exit(code=1)
+
+
+# --full: "không giới hạn" mỗi lần chạy. Chỉ nâng tầng nào nguồn ĐANG bật (> 0) — Việc Làm 24h tắt quét sâu vì trang 2
+# trả 403, CareerViet tắt trang chi tiết vì robots cấm → giữ nguyên, không vì "full" mà gõ vào chỗ bị chặn/bị cấm.
+UNLIMITED = 10**9
+FULL_IF_ENABLED = ("deep_pages_per_run", "detail_max_per_run", "sitemap_max_per_run")
+
+
+def full_config(cfg, names: list[str]):
+    raw = copy.deepcopy(cfg.raw)
+    for name in names:
+        src = raw["sources"][name]
+        src["max_requests"] = UNLIMITED
+        for key in FULL_IF_ENABLED:
+            if int(src.get(key, 0)) > 0:
+                src[key] = UNLIMITED
+        if src.get("full_min_delay_seconds"):
+            src["min_delay_seconds"] = src["full_min_delay_seconds"]
+    return dataclasses.replace(cfg, raw=raw)
 
 
 @app.command()
@@ -183,6 +227,32 @@ def _saved_pages(folder: Path) -> list[Path]:
     return [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in (".html", ".htm")]
 
 
+# Tên file userscript `scripts/topcv-save.user.js` đặt cho trang TopCV bạn đang xem (tải về thư mục Downloads)
+DOWNLOAD_PREFIX = "jobmarket-topcv-"
+
+
+def _collect_downloads(cfg, inbox: Path) -> int:
+    """Chuyển file `jobmarket-topcv-*.html` từ `[sources.topcv] downloads_dir` vào inbox. Chỉ đụng file đúng tiền tố
+    này; trình duyệt chỉ đổi sang tên thật khi tải xong (.crdownload/.part) → không chuyển file đang tải dở."""
+    folder = cfg.source("topcv").get("downloads_dir")
+    source = Path(folder).expanduser() if folder else None
+    if source is None or not source.is_dir():
+        return 0
+    moved = 0
+    for path in source.glob(f"{DOWNLOAD_PREFIX}*"):
+        if not path.is_file() or path.suffix.lower() not in (".html", ".htm"):
+            continue
+        target = inbox / path.name
+        if target.exists():
+            target = target.with_name(f"{path.stem}_{int(path.stat().st_mtime)}{path.suffix}")
+        try:
+            shutil.move(path, target)  # khác ổ đĩa (C: → D:) = chép (giữ giờ sửa = lúc lưu trang) rồi xoá
+        except OSError:  # đang bị mở → lần kiểm tra sau
+            continue
+        moved += 1
+    return moved
+
+
 class InboxWatcher:
     """Nạp trang TopCV bạn tự lưu vào inbox, chỉ khi file đã lưu xong (kích thước + giờ sửa không đổi giữa 2 lần
     kiểm tra). File không nạp được (không phải trang tin) báo 1 lần, không thử lại tới khi file đổi."""
@@ -194,6 +264,7 @@ class InboxWatcher:
         folder.mkdir(parents=True, exist_ok=True)
 
     def poll(self) -> int | None:
+        _collect_downloads(self.cfg, self.folder)
         current = {}
         for p in _saved_pages(self.folder):
             try:
@@ -264,6 +335,19 @@ def _crawl_due(conn, name: str, hours: float) -> tuple[bool, str | None]:
     return datetime.fromisoformat(now_local()) >= next_at, next_at.strftime("%H:%M %d/%m")
 
 
+def _cooldown_note(conn, cfg, name: str) -> str | None:
+    """Nguồn đang trong thời gian nghỉ sau khi chặn ta → lý do để in; không thì None. Không có cách bỏ qua."""
+    hours = float(cfg.crawl.get("blocked_cooldown_hours", 0))
+    rest = health.blocked_cooldown(conn, name, hours, float(cfg.crawl.get("blocked_cooldown_max_hours", hours)))
+    if rest is None:
+        return None
+    until, streak = rest
+    return (
+        f"nguồn đã chặn {streak} lần chạy liền, nghỉ tới {until:%H:%M %d/%m} "
+        "(--force/--now không bỏ qua được; chạy dồn khi đang bị chặn chỉ kéo dài lệnh chặn)"
+    )
+
+
 @app.command()
 def start(
     every_hours: float = typer.Option(
@@ -323,6 +407,12 @@ def start(
                 new, updated, errors = row.fetchone()
                 say(f"TopCV: nạp {new} tin mới, cập nhật {updated}" + (f" · lỗi: {errors}" if errors != "[]" else ""))
             for name in sources:
+                if rest := _cooldown_note(conn, cfg, name):
+                    forced.discard(name)
+                    if announced.get(name) != rest:
+                        say(f"{name}: {rest}")
+                        announced[name] = rest
+                    continue
                 due, next_at = _crawl_due(conn, name, every_hours)
                 due = due or name in forced
                 forced.discard(name)
@@ -334,6 +424,8 @@ def start(
                 budget = int(cfg.source(name).get("max_requests", cfg.crawl.get("max_requests", 50)))
                 detail = int(cfg.source(name).get("detail_max_per_run", 0))
                 extra = f" + {detail} trang chi tiết" if detail else ""
+                if sitemap_pages := int(cfg.source(name).get("sitemap_max_per_run", 0)):
+                    extra += f" + {sitemap_pages} tin qua sitemap"
                 pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
                 say(f"{name}: bắt đầu crawl (≤ {budget} request danh sách{extra}, ~{pace} giây/request)…")
                 sync_needed = True
@@ -458,6 +550,7 @@ def import_html(
     cfg = load_config()
     folder = folder or cfg.path("data_dir") / "inbox" / "topcv"
     folder.mkdir(parents=True, exist_ok=True)
+    _collect_downloads(cfg, folder)
     files = _saved_pages(folder)
     if not files:
         typer.echo(f"Không có file .html trong {folder}")
@@ -505,6 +598,14 @@ def backfill(source: str = typer.Option("careerlink", help="Nguồn có thẻ ti
         typer.echo(f"ngành (trang chi tiết): {reapply_detail_industries(conn, cfg, adapter)}")
     typer.echo(f"mục ngành của tin (đếm chia đều): {backfill_industry_labels(conn, cfg, source)}")
     typer.echo(f"mục ngành theo trang danh mục đã gặp: {backfill_listing_industries(conn, cfg, source)}")
+
+
+@app.command("backfill-details")
+def backfill_details_cmd() -> None:
+    """Tin đã có: kinh nghiệm theo tháng (từ nhãn đã lưu) + tách yêu cầu khỏi mô tả CareerLink. Không request."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    typer.echo(json.dumps(backfill_experience_requirements(conn), ensure_ascii=False))
 
 
 @app.command("backfill-locations")

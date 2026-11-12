@@ -17,6 +17,7 @@ from urllib.parse import unquote, urlsplit
 class _Group:
     agents: list[str] = field(default_factory=list)
     rules: list[tuple[bool, str]] = field(default_factory=list)  # (allow, pattern)
+    crawl_delay: float | None = None  # `Crawl-delay` (ngoài RFC 9309 nhưng nhiều site dùng) — giây giữa 2 request
 
 
 def _pattern_regex(pattern: str) -> re.Pattern:
@@ -54,14 +55,29 @@ class RobotsRules:
                 last_was_agent = False
                 if value:
                     current.rules.append((key == "allow", _normalize(value)))
+            elif key == "crawl-delay" and current is not None:
+                last_was_agent = False
+                try:
+                    delay = float(value)
+                except ValueError:
+                    continue
+                if 0 <= delay < float("inf"):
+                    current.crawl_delay = max(current.crawl_delay or 0.0, delay)
             else:
                 last_was_agent = False
 
-    def _rules_for(self, user_agent: str) -> list[tuple[bool, str]]:
+    def _groups_for(self, user_agent: str) -> list[_Group]:
         product = re.split(r"[/\s]", user_agent.strip(), maxsplit=1)[0].lower()
         named = [g for g in self.groups if product in g.agents]
-        chosen = named or [g for g in self.groups if "*" in g.agents]
-        return [rule for group in chosen for rule in group.rules]
+        return named or [g for g in self.groups if "*" in g.agents]
+
+    def crawl_delay(self, user_agent: str) -> float | None:
+        """`Crawl-delay` lớn nhất trong các nhóm áp dụng cho bot; không khai → None."""
+        delays = [g.crawl_delay for g in self._groups_for(user_agent) if g.crawl_delay is not None]
+        return max(delays) if delays else None
+
+    def _rules_for(self, user_agent: str) -> list[tuple[bool, str]]:
+        return [rule for group in self._groups_for(user_agent) for rule in group.rules]
 
     def can_fetch(self, user_agent: str, url: str) -> bool:
         parts = urlsplit(url)

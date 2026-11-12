@@ -8,3 +8,7 @@ level,Sinh viên / Thực tập sinh,INTERN,CareerLink
 level,Mới đi làm,JUNIOR,CareerLink
 level,Trưởng nhóm / Giám sát,LEAD,CareerLink
 level,Quản lý / Trưởng phòng,MANAGER,CareerLink
+occupation,Backend Developer,OCC01,ITviec nghề (thẻ tin) — cùng nghĩa
+occupation,Frontend Developer,OCC02,ITviec nghề (thẻ tin) — cùng nghĩa
+occupation,Software Engineer in Test (SDET),OCC03,ITviec — kiểm thử tự động
+occupation,Business Analyst,OCC04,ITviec nghề (thẻ tin) — cùng nghĩa

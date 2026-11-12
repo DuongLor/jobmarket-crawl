@@ -273,3 +273,56 @@ Hệ quả cho PLAN: mỗi nguồn là 1 adapter (`html_listing`, `api`, `datase
   CareerLink lọc theo tỉnh → tổng các tỉnh > số tin); lọc tỉnh khớp nếu bất kỳ nơi nào khớp.
 - **Tên tỉnh** theo CareerLink: "Hồ Chí Minh" (mã HCM giữ nguyên).
 - View cho bên đọc ngoài: `v_job_categories`, `v_job_locations` (MySQL chỉ chép bảng, không chép view).
+
+## Lượt 11 — quy tắc thu thập 3 mức, sitemap, nghỉ sau khi bị chặn (2026-11-09, migration 010)
+
+UA trung thực, ~30 request tổng (robots 8 site, sitemap, 1 trang chi tiết/site, chạy thử 13 request trên bản sao DB).
+
+| Nguồn | Phát hiện | Xử lý |
+|---|---|---|
+| CareerLink | Bị chặn 14:44/15:02/15:29 ngày 09/11 vì chạy cách nhau 15–30 phút bằng `--force`/`--now` (chốt 3,5 giờ bị bỏ qua) — lỗi nhịp của ta, không phải chặn hẳn | `blocked_cooldown_hours` (6, ×2 mỗi lần chặn liền, trần 24); `--force`/`--now` không bỏ qua được. Đang nghỉ tới 15:29 10/11 (3 lần liền) |
+| Việc Làm 24h | robots khai `Sitemap` + `Crawl-delay: 5`; sitemap tin 16.646 URL (DB có 920 tin, 15.804 chưa thấy); trang chi tiết 200, có `item` cùng cấu trúc trang danh sách + JSON-LD | Tầng 3 `discover_from_sitemap`: tin chưa thấy → đọc trang chi tiết, mã lớn trước, `sitemap_max_per_run = 100`, sitemap tải lại mỗi 24 giờ. Thử thật 5 tin: đủ trường, dq `ok`, bản gốc không có liên hệ |
+| JobsGO | `sitemap-job.xml` 23.299 URL (lastmod từng tin); trang chi tiết: curl 200 có JSON-LD, **httpx 403** cùng UA | Giữ tắt — 403 riêng với client Python = tín hiệu chặn bot; đổi client để qua thuộc mức Vàng, cần user duyệt |
+| TopCV | `sitemap.xml` 403 (Cloudflare) | Userscript `scripts/topcv-save.user.js` lưu trang user tự mở → Downloads → `start`/`watch`/`import-html` gom vào inbox. Chưa thử với trang TopCV thật (fixture vẫn là mẫu tự dựng) |
+| VietnamWorks | robots 404, sitemap 404 | Không đổi |
+| ITviec, vieclam.gov.vn | robots cho phép (ITviec có sitemap; vieclam.gov.vn `Crawl-delay: 1`) | Ứng viên nguồn mới, chưa làm |
+
+- `Crawl-delay` của robots nay được tôn trọng (max với `min_delay_seconds`); > 120 giây = coi như cấm.
+- Lưu ý dữ liệu: `created_at` của Việc Làm 24h có thể rất cũ (tin dùng lại từ 2018) trong khi JSON-LD `datePosted` là
+  ngày đăng lại — giữ `created_at` cho cả 2 đường (danh sách, sitemap) để cùng một tin có cùng ngày đăng; chưa đổi.
+
+## Lượt 12 — thêm nguồn ITviec (2026-11-10)
+
+UA trung thực, ~10 request khảo sát + 5 request chạy thử trên bản sao DB.
+
+- robots: `User-agent: *` chỉ cấm `/subscriptions/new`, `Allow: /`, sitemap `dunggiatminh.xml` (613 URL trang chi tiết).
+  Danh sách `/it-jobs` (cả `?page=2`) và trang chi tiết đều 200, không challenge (chữ "captcha" trong trang là script
+  reCAPTCHA của form, không phải trang chặn). Cả site ~619 tin IT, 20 tin/trang, 31 trang → quét trọn mỗi lần chạy.
+- Thẻ tin: mã `data-job-key` (UUID), tiêu đề, công ty, nghề, tỉnh (tiếng Anh không dấu; nhiều tỉnh "A - B" → tách trong
+  adapter), kỹ năng, "Posted N … ago" (phút/giờ/ngày → ngày; tuần/tháng → để trống). Trang chi tiết JSON-LD: ngày đăng,
+  hạn nộp, ngành "Information Technology" (alias → IND01, không gán danh mục vì gồm cả phần mềm/phần cứng), mô tả.
+- **Không lấy:** lương (ẩn, cần đăng nhập — "Sign in to view salary", JSON-LD "You'll love it"); cấp bậc (không có);
+  kinh nghiệm JSON-LD **không đáng tin** (tin ghi "ít nhất 3 năm" mà `monthsOfExperience` = 10; tin khác 37) → bỏ.
+- Nghề: chỉ 4 tên tương đương rõ được ánh xạ (`seeds/label_aliases.csv`: Backend/Frontend Developer, SDET, Business
+  Analyst); còn lại `unmapped` (danh mục nghề chuẩn chỉ có 4 nghề IT) → chỉ số phủ nghề của ITviec sẽ thấp.
+- Chạy thử thật: 20 tin, 3 trang chi tiết, 20/20 dq `ok`, ngành IND01, tỉnh HCM/HN/DN đúng, 0 lỗi.
+
+## Lượt 13 — mô tả, yêu cầu công việc, kinh nghiệm theo tháng (2026-11-11, migration 011)
+
+- Cột mới `job_posts`: `requirements_text`, `experience_raw` (chữ nguồn ghi), `experience_min_months`,
+  `experience_max_months` ("1 - 2 năm" → 12/24; "1 năm" → 12/NULL = tối thiểu; "Dưới 1 năm" → 0/12; "Chưa có kinh
+  nghiệm" → 0/0; chữ không rõ → NULL, không đoán). Nhóm 6 mức (`experience_label_id`) giữ nguyên cho thống kê.
+  Lỗi tránh được: `norm_key` xoá "-" → "1 - 2 năm" thành "1 2 nam" (đọc ra 24 tháng) → bộ đọc chỉ bỏ dấu, giữ ký hiệu.
+- Nguồn: Việc Làm 24h — trang chi tiết `item.description_html` + `job_requirement`/`skill_requirement`/
+  `other_requirement` (bật `detail_max_per_run`; tin từ sitemap ghi luôn khi lưu). CareerLink — mô tả JSON-LD tách tại
+  dòng "* Kinh nghiệm / Kỹ năng chi tiết:" (13/13 mô tả thật tách đúng), kinh nghiệm `monthsOfExperience`. ITviec —
+  mục `div.paragraph > h2` "Mô tả công việc"/"Job description", "Yêu cầu công việc"/"Your skills and experience"
+  (kiểm trang thật tiếng Anh); kinh nghiệm vẫn bỏ. CareerViet — robots cấm trang chi tiết → không có.
+- `backfill-details` nạp cho tin cũ: 35.334 tin có khoảng tháng từ nhãn đã lưu; 13 mô tả CareerLink tách yêu cầu.
+- Dashboard "Danh sách tin": chi tiết tin hiện kinh nghiệm (chữ + khoảng), mô tả, yêu cầu công việc.
+- Lần chạy 11/11 08:36–09:27 (code trước lượt này): CareerLink +1.011 · Việc Làm 24h +226 (sitemap 100) · CareerViet
+  +1.228 · ITviec +619 (trọn site) — không nguồn nào chặn.
+- 2026-11-11 16:19: lần `run --full` Việc Làm 24h dừng sau 179/14.879 trang vì **1 ReadTimeout** ở trang chi tiết (+1 lỗi
+  502 ở trang nghề o27) — lỗi phía máy chủ, không phải chặn. Sửa: client thử lại timeout/mất kết nối/502/504 (nghỉ lâu
+  dần); hết lượt thì bỏ qua đúng tin đó (lần sau đọc lại) và đi tiếp; chỉ dừng tầng khi 5 trang LIỀN lỗi. Không tính là
+  bị chặn → không kích hoạt thời gian nghỉ.

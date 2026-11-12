@@ -4,6 +4,12 @@ Thu thập tin tuyển dụng công khai (CareerLink, Việc Làm 24h, CareerVie
 
 Dự án độc lập, **không liên quan CCareer** dù nằm cùng thư mục `D:\Project\ccareer-project\`.
 
+> **Trạng thái (2026-11-11):** thêm **mô tả, yêu cầu công việc, kinh nghiệm theo tháng** (Việc Làm 24h, CareerLink, ITviec — đọc ở trang chi tiết; CareerViet robots cấm). Tin cũ: `python -m jobmarket backfill-details`. Quét trọn site: `run --source <nguồn> --full`.
+>
+> **Trạng thái (2026-11-10):** thêm nguồn **ITviec** (~620 tin IT, quét trọn mỗi lần; không có lương — ITviec ẩn lương khi chưa đăng nhập; không lấy kinh nghiệm vì dữ liệu nguồn mâu thuẫn).
+>
+> **Trạng thái (2026-11-09):** quy tắc thu thập 3 mức Xanh/Vàng/Đỏ (chú thích đầu `config.toml`). **Việc Làm 24h đọc thêm sitemap** (~16.600 URL tin; tin chưa thấy ở trang 1 → đọc trang chi tiết, 100 tin/lần chạy). Nguồn chặn ta → **nghỉ 6 giờ, nhân đôi mỗi lần chặn liền (trần 24 giờ)**, `--force`/`--now` không bỏ qua được. Tôn trọng `Crawl-delay` của robots. TopCV: thêm userscript lưu trang bạn đang xem (xem mục TopCV dưới).
+>
 > **Trạng thái (2026-11-04):** crawl tự động **CareerLink, Việc Làm 24h, CareerViet** (thêm 2 nguồn mới 2026-11-04 — Việc Làm 24h chỉ đọc được trang 1 của mỗi danh sách, trang 2 trả 403 → không cố; CareerViet robots cấm trang chi tiết `/vi/jobs/*` → chỉ thẻ tin). Thống kê đã sửa 2026-11-04: "Đang tuyển" chỉ đếm tin xác định được trạng thái; tin đăng trước ngày bắt đầu thu thập không tính vào xu hướng; cơ cấu ngành đếm chia đều tin nhiều ngành và không dùng ngành suy từ trang danh mục.
 >
 > **Trạng thái (2026-11-03):** chạy được đủ Bước 1–5 (crawl, chuẩn hoá, thống kê, dashboard, báo cáo tháng, lịch chạy). **Crawl tự động: CareerLink** — danh sách tin (có ngày đăng/cập nhật, cấp bậc, lương, địa điểm); ngành lấy từ trang danh mục + trang chi tiết; kinh nghiệm chỉ ở trang chi tiết, hiện đang bị hộp xác minh "không phải robot" → dừng, không vượt, lịch chạy tự thử lại. **Dữ liệu lịch sử: VietJobs** ([HF dinhieufam/VietJobs](https://huggingface.co/datasets/dinhieufam/VietJobs), MIT) — xem ở bộ dữ liệu "Lịch sử". TopCV và JobsGO chặn bot → tắt; TopCV vẫn nạp được qua `import-html`. Chi tiết nguồn: [`docs/spike-0.md`](docs/spike-0.md).
@@ -78,6 +84,8 @@ Chạy thử ngay: `Start-ScheduledTask jobmarket-crawl` · xem kết quả: `Ge
 - **Trang chi tiết tin** (`topcv.vn/viec-lam/…/<mã>.html`): đầy đủ nhất — đọc JSON-LD `JobPosting` của trang: ngành, kinh nghiệm, ngày đăng gốc, hạn nộp, loại hình, mô tả (đã xoá SĐT/email). Gộp vào đúng tin đã có từ trang danh sách (cùng mã tin), không tạo tin trùng.
 
 Ngày thấy tin = lúc bạn lưu file. File đã nạp chuyển vào `done/`. **Tự nạp:** `python -m jobmarket watch` theo dõi thư mục, lưu trang xong ~10–20 giây là vào DB (file không hợp lệ báo 1 lần, để nguyên chỗ); lịch chạy (`run_nightly.ps1`) cũng nạp inbox trước khi crawl.
+
+**TopCV — userscript lưu 1 chạm** (thay cho Ctrl+S): cài Tampermonkey/Violentmonkey, tạo script mới, dán nội dung [`scripts/topcv-save.user.js`](scripts/topcv-save.user.js). Ở trang danh sách/chi tiết tin TopCV **bạn tự mở** sẽ hiện nút "Lưu cho jobmarket" (tuỳ chọn "tự lưu mỗi trang tin tôi mở"). File `jobmarket-topcv-*.html` tải về `~/Downloads` (`[sources.topcv] downloads_dir`); `start`/`watch`/`import-html` tự chuyển vào `data/inbox/topcv/` rồi nạp — chỉ đụng file đúng tiền tố đó. Script không gửi request, không tự mở trang.
 
 ## Tài liệu
 
