@@ -326,3 +326,21 @@ UA trung thực, ~10 request khảo sát + 5 request chạy thử trên bản sa
   502 ở trang nghề o27) — lỗi phía máy chủ, không phải chặn. Sửa: client thử lại timeout/mất kết nối/502/504 (nghỉ lâu
   dần); hết lượt thì bỏ qua đúng tin đó (lần sau đọc lại) và đi tiếp; chỉ dừng tầng khi 5 trang LIỀN lỗi. Không tính là
   bị chặn → không kích hoạt thời gian nghỉ.
+
+## Lượt 14 — chỉ 5 site, chặn đọc trùng, tự giãn nhịp, xoá CareerLink (2026-11-12)
+
+- Việc Làm 24h `--full` ở 5 giây/request: **403 sau ~1.400 request** (lần chạy 32) → nhịp `--full` 12 giây; thử lại sớm
+  bằng `--ignore-cooldown` (lần 39) vẫn 403 ngay request đầu. Kết luận: chặn theo tốc độ đọc, không phải cấm hẳn.
+- 11:05: 3 tiến trình đọc song song (2 cửa sổ `run --full` + `start`) → CareerViet bị đọc gấp đôi, CareerLink bị chặn
+  sau 3 phút. Sửa: `health.active_run` — bỏ qua nguồn có lần chạy 'running' còn lưu tin trong 30 phút;
+  `close_stale_runs` không đóng lần chạy còn lưu tin (trước đây `--full` > 2 giờ bị ghi nhầm 'interrupted').
+- Tự giãn nhịp `pace_after_block_*`: mỗi lần bị chặn trong 3 ngày → nhịp ×1,5 (tối đa ×3).
+- `run`/`start` giữ máy không ngủ khi crawl (`SetThreadExecutionState`) — lần 31 đứng ~15 giờ vì máy ngủ.
+- Thử lại JobsGO (UA thật): robots 200, trang danh sách **403 Cloudflare** → giữ tắt. VietnamWorks: robots 404,
+  `/viec-lam` 200 nhưng HTML không có link tin; tải JS công khai để tìm API tìm kiếm bị bộ kiểm soát quyền chặn
+  ("vượt rào truy cập website") → dừng, chưa làm.
+- Common Crawl (CC-MAIN-2026-43) chỉ mục trả 504 lúc thử; Wayback có bản lưu trang danh sách TopCV 15/07/2026 — chưa dùng.
+- User bỏ CareerLink: `purge-source --source careerlink --yes` xoá 6.684 tin, 961 công ty, 71 nhãn, 10 lần chạy (sao lưu
+  `data/backup/market-20261112-135343.db`). ⚠️ Xoá cả lịch sử lần chạy làm mất thời gian nghỉ → `start` cũ (cấu hình
+  nạp trước khi tắt CareerLink) crawl lại CareerLink lúc 13:55, bị chặn sau 3 request, không lưu tin (lần chạy 44).
+  Bài học: tắt mọi tiến trình đang chạy TRƯỚC khi xoá nguồn.

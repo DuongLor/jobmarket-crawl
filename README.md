@@ -4,6 +4,8 @@ Thu thập tin tuyển dụng công khai (CareerLink, Việc Làm 24h, CareerVie
 
 Dự án độc lập, **không liên quan CCareer** dù nằm cùng thư mục `D:\Project\ccareer-project\`.
 
+> **Trạng thái (2026-11-12):** chỉ crawl **TopCV, VietnamWorks, CareerViet, Việc Làm 24h, JobsGO** theo yêu cầu user. Tự động được: **CareerViet, Việc Làm 24h** (`scripts/register_tasks.ps1` — Task Scheduler, mỗi nguồn 1 tiến trình). TopCV: userscript (trang bạn tự duyệt). JobsGO: Cloudflare chặn bot → tắt. VietnamWorks: danh sách tin chỉ có qua API tìm kiếm của site — chưa làm (bước khảo sát bị bộ kiểm soát quyền của Claude Code chặn). **Không vượt chặn.** CareerLink: tắt + đã xoá dữ liệu (`purge-source`, sao lưu ở `data/backup/`); ITviec: tắt crawl, giữ dữ liệu. Bị chặn → tự giãn nhịp ×1,5 mỗi lần (3 ngày, tối đa ×3); `run`/`start` không đọc 1 nguồn bằng 2 tiến trình.
+
 > **Trạng thái (2026-11-11):** thêm **mô tả, yêu cầu công việc, kinh nghiệm theo tháng** (Việc Làm 24h, CareerLink, ITviec — đọc ở trang chi tiết; CareerViet robots cấm). Tin cũ: `python -m jobmarket backfill-details`. Quét trọn site: `run --source <nguồn> --full`.
 >
 > **Trạng thái (2026-11-10):** thêm nguồn **ITviec** (~620 tin IT, quét trọn mỗi lần; không có lương — ITviec ẩn lương khi chưa đăng nhập; không lấy kinh nghiệm vì dữ liệu nguồn mâu thuẫn).
@@ -76,6 +78,19 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatt
 Register-ScheduledTask -TaskName "jobmarket-crawl" -Action $action -Trigger $trigger -Settings $settings `
   -Description "Crawl tin tuyển dụng hằng đêm"
 ```
+
+**Tự quét trọn site (2026-11-12)** — mỗi nguồn 1 task `--full`, cách 4 giờ thử chạy 1 lần: đang chạy thì bỏ qua
+(`IgnoreNew`), đang nghỉ sau khi bị chặn thì `run` tự bỏ qua, hết nghỉ thì đọc tiếp phần còn dở. `run` giữ máy không
+ngủ khi đang crawl; `-WakeToRun` đánh thức máy để bắt đầu. Dùng thay cho task `jobmarket-crawl` ở trên và thay `start`
+(`start --no-crawl` để chỉ mở dashboard vẫn được):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\Project\ccareer-project\jobmarket-crawl\scripts\register_tasks.ps1
+```
+
+Một nguồn chỉ có một tiến trình đọc: `run`/`start` bỏ qua nguồn có lần chạy khác còn lưu tin trong 30 phút qua.
+Xem: `Get-ScheduledTask jobmarket-full-* | Get-ScheduledTaskInfo` · log: `data\logs\run_<nguồn>_<ngày>.log` · gỡ:
+`register_tasks.ps1 -Remove`.
 
 Chạy thử ngay: `Start-ScheduledTask jobmarket-crawl` · xem kết quả: `Get-ScheduledTaskInfo jobmarket-crawl` (LastTaskResult 0 = ổn) · log: `data\logs\run_<ngày>.log` · gỡ: `Unregister-ScheduledTask jobmarket-crawl -Confirm:$false`.
 

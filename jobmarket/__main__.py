@@ -34,6 +34,7 @@ from jobmarket.pipeline import (
 )
 from jobmarket.sources import careerlink, careerviet, itviec, jobsgo, vieclam24h, vietjobs
 from jobmarket.sources.clean_csv import import_clean_csv
+from jobmarket.store import purge
 from jobmarket.store.db import init_db
 from jobmarket.timeutil import now_local
 
@@ -43,6 +44,16 @@ for _stream in (sys.stdout, sys.stderr):
         _stream.reconfigure(encoding="utf-8", errors="replace")
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
+
+
+def keep_awake() -> None:
+    """Windows: không cho máy ngủ khi tiến trình còn chạy (tự hết khi tiến trình thoát). Lần chạy 31 (11–12/11) đứng
+    ~15 giờ vì máy ngủ qua đêm. Màn hình vẫn tắt bình thường."""
+    if sys.platform == "win32":
+        import ctypes
+
+        es_continuous, es_system_required = 0x80000000, 0x00000001
+        ctypes.windll.kernel32.SetThreadExecutionState(es_continuous | es_system_required)
 
 
 @app.command()
@@ -64,10 +75,22 @@ def init() -> None:
     typer.echo(f"DB: {cfg.path('db_file')}  {json.dumps(counts)}")
 
 
-def _client_for(cfg, name: str) -> PoliteClient:
-    """Khoảng nghỉ riêng từng nguồn (vd CareerLink hạn chế khi đọc nhanh) ghi đè mặc định [crawl]."""
-    delay = cfg.source(name).get("min_delay_seconds")
-    return PoliteClient({**cfg.crawl, **({"min_delay_seconds": delay} if delay else {})})
+def _client_for(cfg, name: str, conn=None) -> PoliteClient:
+    """Khoảng nghỉ riêng từng nguồn (vd CareerLink hạn chế khi đọc nhanh) ghi đè mặc định [crawl]; có `conn` → nhân
+    thêm hệ số tự giãn sau các lần bị chặn gần đây (`pace_after_block_*`)."""
+    delay = float(cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"])
+    if conn is not None:
+        factor, blocks = health.pace_factor(
+            conn,
+            name,
+            days=float(cfg.crawl.get("pace_after_block_days", 0)),
+            step=float(cfg.crawl.get("pace_after_block_step", 1)),
+            cap=float(cfg.crawl.get("pace_after_block_max", 1)),
+        )
+        if factor > 1:
+            echo(f"{name}: bị chặn {blocks} lần gần đây → giãn nhịp ×{factor:.2g}: {delay:g} → {delay * factor:g} giây")
+            delay *= factor
+    return PoliteClient({**cfg.crawl, "min_delay_seconds": delay})
 
 
 PAGED_SOURCES = {
@@ -126,8 +149,15 @@ def run(
         "lần chạy. Vẫn giữ nhịp nghỉ (full_min_delay_seconds), robots.txt, dừng + nghỉ khi bị chặn. "
         "Không đồng bộ MySQL.",
     ),
+    ignore_cooldown: bool = typer.Option(
+        False,
+        "--ignore-cooldown",
+        help="Bỏ thời gian nghỉ sau khi bị chặn (thử lại sớm). Vẫn dừng ngay nếu site còn trả 403/429 — "
+        "thử dồn có thể kéo dài lệnh chặn.",
+    ),
 ) -> None:
     """Thu thập + chuẩn hoá. Exit code 1 nếu có nguồn thất bại (để Task Scheduler biết)."""
+    keep_awake()
     cfg = load_config()
     names = [n for n, s in cfg.raw["sources"].items() if s.get("enabled")] if source == "all" else [source]
     if source != "all" and not cfg.source(source).get("enabled"):
@@ -141,9 +171,14 @@ def run(
     show_progress(echo)
     failed = crawled = False
     for name in names:
-        if rest := _cooldown_note(conn, cfg, name):
-            echo(f"{name}: bỏ qua — {rest}")
+        if busy := health.active_run(conn, name):
+            echo(f"{name}: bỏ qua — lần chạy {busy} của tiến trình khác đang đọc nguồn này")
             continue
+        if rest := _cooldown_note(conn, cfg, name):
+            if not ignore_cooldown:
+                echo(f"{name}: bỏ qua — {rest} (thêm --ignore-cooldown để thử lại sớm)")
+                continue
+            echo(f"{name}: bỏ thời gian nghỉ theo yêu cầu — {rest}")
         due, next_at = _crawl_due(conn, name, min_hours)
         if not (due or force or full):
             skipped = f"đã chạy trong {min_hours:g} giờ qua; lần tới {next_at}"
@@ -151,7 +186,7 @@ def run(
             continue
         pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
         echo(f"{name}: bắt đầu crawl (~{pace} giây/request, mỗi trang đọc xong in 1 dòng)…")
-        client = _client_for(cfg, name)
+        client = _client_for(cfg, name, conn)
         try:
             run_id = run_source(conn, cfg, client, name, max_pages)
         except KeyboardInterrupt:
@@ -360,6 +395,8 @@ def start(
 ) -> None:
     """MỘT LỆNH CHẠY TẤT CẢ: dashboard (chỉ máy này) + tự nạp trang TopCV bạn lưu + crawl nguồn đang bật cách nhau
     ≥ `every_hours` giờ (tính từ lần chạy cuối trong DB, tắt/mở lại không crawl dồn). Dừng: Ctrl+C."""
+    if crawl:
+        keep_awake()
     cfg = load_config()
     conn = init_db(cfg.path("db_file"))
     raw_dir_exists(cfg)
@@ -407,6 +444,12 @@ def start(
                 new, updated, errors = row.fetchone()
                 say(f"TopCV: nạp {new} tin mới, cập nhật {updated}" + (f" · lỗi: {errors}" if errors != "[]" else ""))
             for name in sources:
+                if busy := health.active_run(conn, name):
+                    note = f"lần chạy {busy} của tiến trình khác đang đọc nguồn này — chờ"
+                    if announced.get(name) != note:
+                        say(f"{name}: {note}")
+                        announced[name] = note
+                    continue
                 if rest := _cooldown_note(conn, cfg, name):
                     forced.discard(name)
                     if announced.get(name) != rest:
@@ -429,7 +472,7 @@ def start(
                 pace = cfg.source(name).get("min_delay_seconds") or cfg.crawl["min_delay_seconds"]
                 say(f"{name}: bắt đầu crawl (≤ {budget} request danh sách{extra}, ~{pace} giây/request)…")
                 sync_needed = True
-                client = _client_for(cfg, name)
+                client = _client_for(cfg, name, conn)
                 try:
                     try:
                         run_id = run_source(conn, cfg, client, name, None)
@@ -614,6 +657,30 @@ def backfill_locations_cmd() -> None:
     cfg = load_config()
     conn = init_db(cfg.path("db_file"))
     typer.echo(f"nơi làm việc: {backfill_locations(conn, cfg)}")
+
+
+@app.command("purge-source")
+def purge_source_cmd(
+    source: str = typer.Option(..., help="Nguồn cần xoá hết dữ liệu (vd careerlink)"),
+    yes: bool = typer.Option(False, "--yes", help="Xác nhận xoá (không có thì chỉ in số dòng sẽ xoá)"),
+) -> None:
+    """Xoá MỌI dữ liệu của 1 nguồn (tin, công ty, nhãn, lần chạy, sitemap). Tự sao lưu DB vào data/backup trước khi
+    xoá. Nguồn phải đang tắt trong config.toml và không có tiến trình nào đang đọc."""
+    cfg = load_config()
+    conn = init_db(cfg.path("db_file"))
+    if cfg.raw["sources"].get(source, {}).get("enabled"):
+        raise typer.BadParameter(f"{source} đang bật trong config.toml — tắt trước để không bị crawl lại")
+    if busy := health.active_run(conn, source):
+        raise typer.BadParameter(f"lần chạy {busy} của {source} đang chạy — dừng tiến trình đó trước")
+    jobs = conn.execute("SELECT COUNT(*) FROM job_posts WHERE source = ?", (source,)).fetchone()[0]
+    runs = conn.execute("SELECT COUNT(*) FROM runs WHERE source = ?", (source,)).fetchone()[0]
+    if not yes:
+        typer.echo(f"{source}: sẽ xoá {jobs} tin, {runs} lần chạy (+ công ty, nhãn, sitemap). Thêm --yes để xoá.")
+        return
+    saved = purge.backup(conn, cfg.path("data_dir") / "backup")
+    typer.echo(f"Đã sao lưu: {saved}")
+    counts = purge.purge_source(conn, source)
+    typer.echo(f"{source}: đã xoá " + ", ".join(f"{t} {n}" for t, n in counts.items() if n))
 
 
 @app.command()

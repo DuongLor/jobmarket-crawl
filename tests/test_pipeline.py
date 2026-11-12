@@ -13,15 +13,20 @@ from jobmarket.store.db import init_db
 CHALLENGE = "<html><title>Just a moment...</title>Enable JavaScript and cookies to continue</html>"
 
 
+TEST_ENABLED_SOURCES = {"careerlink", "vieclam24h", "careerviet", "itviec"}
+
+
 @pytest.fixture
 def tmp_cfg(cfg, tmp_path):
     raw = {**cfg.raw, "paths": {"data_dir": "data", "db_file": "data/test.db", "raw_dir": "data/raw"}}
     raw["crawl"] = {**cfg.crawl, "min_delay_seconds": 0}
     # test tầng danh sách không đọc trang chi tiết, không quét sâu, giữ thứ tự mặc định (test riêng tự bật)
     # không đọc sitemap, không đụng thư mục Downloads thật của máy (test riêng tự bật)
+    # Bật/tắt nguồn cố định cho test — không phụ thuộc user tắt nguồn nào trong config.toml thật (2026-11-12)
     raw["sources"] = {
         name: {
             **src,
+            "enabled": name in TEST_ENABLED_SOURCES,
             "detail_max_per_run": 0,
             "deep_pages_per_run": 0,
             "min_delay_seconds": 0,

@@ -20,6 +20,11 @@ expire_unseen_days = 14
 # 3 lần cách 15–30 phút bằng --force → bị chặn ngay trang đầu). 0 = tắt.
 blocked_cooldown_hours = 6
 blocked_cooldown_max_hours = 24
+# Tự giãn nhịp: mỗi lần bị chặn trong N ngày qua nhân nhịp nghỉ của nguồn đó ×step (tối đa ×max); N ngày không bị chặn
+# → về nhịp gốc. Site chặn theo tốc độ (Việc Làm 24h, CareerLink) → đọc chậm dưới ngưỡng thay vì vượt. 0 = tắt.
+pace_after_block_days = 3
+pace_after_block_step = 1.5
+pace_after_block_max = 3
 
 # QUY TẮC THU THẬP (2026-11-09) — chi tiết: .claude/agents/jobmarket-dev.md
 #   Xanh  (tự làm): robots cho phép + User-Agent trung thực + kênh site công bố cho máy (sitemap, JSON-LD,
@@ -43,7 +48,8 @@ downloads_dir = "~/Downloads"
 # Nguồn có phân trang: mỗi đêm duyệt tối đa `max_pages` trang mỗi danh sách, dừng sớm khi
 # `stop_after_known_pages` trang liên tiếp không có tin mới. Lần đầu muốn lấy nhiều: `run --max-pages 40`.
 [sources.careerlink]
-enabled = true
+# TẮT 2026-11-12: user chỉ crawl TopCV / VietnamWorks / CareerViet / Việc Làm 24h / JobsGO. Dữ liệu cũ vẫn giữ.
+enabled = false
 start_url = "https://www.careerlink.vn/vieclam/list"
 # 2026-11-03: CareerLink hạn chế ngầm (trả trang không có tin, HTTP 200) sau ~25 request/1 phút và ~55 request/9 phút
 # → giới hạn theo SỐ request trong một khoảng thời gian; tự gỡ sau ~3,5 giờ. Tôn trọng: mỗi lần chạy ≤ ~50 request
@@ -91,8 +97,9 @@ expire_unseen = false
 # tiết (bot tự khai danh tính nhận 200) có đủ trường như trang danh sách. Tin chưa thấy ở danh sách → đọc trang chi
 # tiết, mã tin lớn (mới) trước. Đính chính 2026-11-11: trước ghi "robots Crawl-delay 5" — kiểm lại thấy `Crawl-delay: 5`
 # chỉ trong nhóm SemrushBot/AhrefsBot; nhóm `*` (bot này) KHÔNG khai nhịp.
-# `run --full`: 5 giây/request = đúng nhịp site đòi ở bot SEO lớn (~15.900 trang chi tiết: 44 → ~22 giờ). Chạy thường giữ 10.
-full_min_delay_seconds = 5
+# `run --full`: 2026-11-12 ở 5 giây/request bị 403 sau ~1.400 request (~2 giờ) → nâng lên 12 (~14.700 trang ≈ 49 giờ,
+# chạy nhiều đợt, sitemap nhớ tin đã đọc). Chạy thường giữ 10. Vẫn 403 → nâng tiếp, KHÔNG vượt chặn.
+full_min_delay_seconds = 12
 # Trang chi tiết (2026-11-11): mô tả + yêu cầu công việc chỉ có ở trang chi tiết → đọc cho tin thấy ở trang danh sách
 # (tin từ sitemap đã ghi luôn khi lưu). `run --full` = không giới hạn.
 detail_max_per_run = 60
@@ -123,7 +130,8 @@ max_listings = 5  # chưa dùng: CareerViet chỉ có 1 danh sách chung (không
 # Khảo sát 2026-11-10 (mức Xanh): robots `Allow: /`, bot tự khai danh tính nhận 200 ở mọi trang danh sách + chi tiết.
 # Cả site ~620 tin IT, 20 tin/trang, ~31 trang → mỗi lần chạy quét trọn (phần đầu + quét sâu) → hết hạn theo vòng quét.
 # Không có lương (ẩn, cần đăng nhập) và cấp bậc; kinh nghiệm JSON-LD không đáng tin → bỏ (xem sources/itviec.py).
-enabled = true
+# TẮT 2026-11-12: user chỉ crawl TopCV / VietnamWorks / CareerViet / Việc Làm 24h / JobsGO. Dữ liệu cũ vẫn giữ.
+enabled = false
 start_url = "https://itviec.com/it-jobs"
 min_delay_seconds = 10
 max_requests = 40

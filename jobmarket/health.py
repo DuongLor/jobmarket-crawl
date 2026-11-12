@@ -8,6 +8,8 @@ from jobmarket.store.db import now_iso
 
 # Lần chạy "có dữ liệu" = không thất bại và lưu được ít nhất 1 tin (mới hoặc cập nhật)
 DATA_RUN = "status IN ('success', 'partial', 'interrupted') AND posts_new + posts_updated > 0"
+# Lần chạy 'running' không lưu tin nào trong N phút = coi như tiến trình đã chết
+ACTIVE_QUIET_MINUTES = 30
 
 
 def close_stale_runs(
@@ -28,6 +30,10 @@ def close_stale_runs(
         cutoff = datetime.fromisoformat(now_iso()) - timedelta(minutes=older_than_minutes)
         where.append("started_at < ?")
         params.append(cutoff.isoformat(timespec="seconds"))
+        # `run --full` kéo dài nhiều giờ: còn lưu tin gần đây = tiến trình còn sống → không đóng
+        quiet = datetime.fromisoformat(now_iso()) - timedelta(minutes=min(older_than_minutes, ACTIVE_QUIET_MINUTES))
+        where.append("NOT EXISTS (SELECT 1 FROM job_posts p WHERE p.last_run_id = runs.id AND p.last_seen_at >= ?)")
+        params.append(quiet.isoformat(timespec="seconds"))
     note = json.dumps(["Lần chạy bị ngắt giữa chừng — số tin tính lại từ DB (tối thiểu)"], ensure_ascii=False)
     with conn:
         cur = conn.execute(
@@ -40,6 +46,32 @@ def close_stale_runs(
             (now_iso(), note, *params),
         )
     return cur.rowcount
+
+
+def active_run(conn: sqlite3.Connection, source: str, quiet_minutes: float = ACTIVE_QUIET_MINUTES) -> int | None:
+    """Lần chạy 'running' của nguồn còn hoạt động thật (mới bắt đầu, hoặc vừa lưu tin trong `quiet_minutes` phút) →
+    id; ngược lại None. Chặn 2 tiến trình đọc cùng 1 nguồn (2026-11-12: 2 cửa sổ `run --full` + `start` chạy song song
+    → CareerViet bị đọc gấp đôi, CareerLink bị chặn sau 3 phút)."""
+    cutoff = (datetime.fromisoformat(now_iso()) - timedelta(minutes=quiet_minutes)).isoformat(timespec="seconds")
+    row = conn.execute(
+        """SELECT r.id FROM runs r WHERE r.source = ? AND r.status = 'running' AND (r.started_at >= ?
+           OR EXISTS (SELECT 1 FROM job_posts p WHERE p.last_run_id = r.id AND p.last_seen_at >= ?))
+           ORDER BY r.started_at DESC LIMIT 1""",
+        (source, cutoff, cutoff),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def pace_factor(conn: sqlite3.Connection, source: str, days: float, step: float, cap: float) -> tuple[float, int]:
+    """Tự giãn nhịp sau khi bị chặn: mỗi lần chạy bị chặn trong `days` ngày qua nhân nhịp nghỉ thêm `step` (tối đa
+    `cap`). Hết `days` ngày không bị chặn → về nhịp gốc. → (hệ số, số lần bị chặn). Việc Làm 24h / CareerLink chặn theo
+    tốc độ đọc (2026-11-12: 5 giây/request → 403 sau ~1.400 request) — đọc chậm dưới ngưỡng thay vì vượt chặn."""
+    if days <= 0 or step <= 1:
+        return 1.0, 0
+    since = (datetime.fromisoformat(now_iso()) - timedelta(days=days)).isoformat(timespec="seconds")
+    samples = conn.execute("SELECT error_sample FROM runs WHERE source = ? AND started_at >= ?", (source, since))
+    blocks = sum(_was_blocked(s) for (s,) in samples)
+    return min(step**blocks, cap), blocks
 
 
 def _was_blocked(error_sample: str | None) -> bool:
