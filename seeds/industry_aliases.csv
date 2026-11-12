@@ -109,3 +109,22 @@ Dược / Sinh học,IND08,CareerLink danh mục /viec-lam/duoc-sinh-hoc/28
 Thư ký / Hành chánh,IND11,CareerLink danh mục /viec-lam/thu-ky-hanh-chanh/6
 Tư vấn dịch vụ khách hàng,IND03,CareerLink danh mục /viec-lam/tu-van-dich-vu-khach-hang/7 — cùng nhóm CSKH như "Dịch vụ khách hàng"
 Information Technology,IND01,ITviec JSON-LD industry — cả site là việc làm IT (2026-11-10)
+CEO & General Management,,VietnamWorks nhóm chức năng — quản lý chung, không cho biết ngành → bỏ qua
+Chính Phủ/Phi Lợi Nhuận,,VietnamWorks — khu vực, không phải ngành nghề → bỏ qua
+Công Nghệ Thông Tin/Viễn Thông,IND01,VietnamWorks nhóm chức năng
+Giáo Dục,IND07,VietnamWorks
+Hành Chính Văn Phòng,IND11,VietnamWorks
+Hậu Cần/Xuất Nhập Khẩu/Kho Bãi,IND06,VietnamWorks
+Khoa Học & Kỹ Thuật,IND02,VietnamWorks — cùng nhóm với "Kỹ thuật ứng dụng / Cơ khí"
+Kiến Trúc/Xây Dựng,IND09,VietnamWorks
+Kinh Doanh,IND03,VietnamWorks
+Kỹ Thuật,IND02,VietnamWorks — cùng nhóm với "Kỹ thuật ứng dụng / Cơ khí"
+Ngân Hàng & Dịch Vụ Tài Chính,IND04,VietnamWorks
+Nhân Sự/Tuyển Dụng,IND11,VietnamWorks
+Pháp Lý,IND11,VietnamWorks — như TopCV "Nhân sự/Hành chính/Pháp chế"
+"Tiếp Thị, Quảng Cáo/Truyền Thông",IND05,VietnamWorks
+Vận Tải,IND06,VietnamWorks
+Dịch Vụ Ăn Uống,IND10,VietnamWorks
+Bán Lẻ/Tiêu Dùng,IND03,VietnamWorks
+"Nghệ thuật, Truyền thông/In ấn/Xuất bản",IND13,VietnamWorks
+Dược,IND08,VietnamWorks

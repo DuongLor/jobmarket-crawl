@@ -5,7 +5,7 @@
 param([switch]$Remove)
 
 $dir = Split-Path -Parent $PSScriptRoot
-$sources = "vieclam24h", "careerviet"  # nguon dang bat trong config.toml (TopCV/JobsGO chan bot, VietnamWorks chua co)
+$sources = "vieclam24h", "careerviet", "vietnamworks"  # nguon dang bat (TopCV/JobsGO chan bot)
 
 if ($Remove) {
     Get-ScheduledTask -TaskName "jobmarket-full-*" -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
@@ -22,7 +22,8 @@ Get-ScheduledTask -TaskName "jobmarket-full-*" -ErrorAction SilentlyContinue |
     Unregister-ScheduledTask -Confirm:$false
 foreach ($s in $sources) {
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $dir `
-        -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$dir\scripts\run_nightly.ps1`" -Source $s -Full"
+        -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$dir\scripts\run_nightly.ps1`" -Source $s -Full"
+    # Chay an: cua so console hien len ma bi dong -> crawl bi dung giua chung (2026-11-12: exit 0xC000013A sau 1 phut)
     Register-ScheduledTask -TaskName "jobmarket-full-$s" -Action $action -Trigger $trigger -Settings $settings `
         -Description "jobmarket: quet tron $s (--full), tu nghi khi bi chan" -Force | Out-Null
 }

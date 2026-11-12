@@ -143,6 +143,20 @@ max_listings = 1
 # Trang chi tiết (JSON-LD): ngày đăng chính xác, hạn nộp → trạng thái, mô tả. Lần đầu ~620 tin ≈ 21 lần chạy.
 detail_max_per_run = 60  # 2026-11-11: 30 → 60 (~620 tin ≈ 11 lần chạy)
 
+[sources.vietnamworks]
+# Khảo sát 2026-11-12 (user cho phép, docs/spike-0.md lượt 15): robots 404 (không hạn chế); danh sách tin chỉ có qua API
+# tìm kiếm công khai mà chính trang web gọi (POST, không đăng nhập/token). Mỗi tin đủ trường kể cả mô tả + yêu cầu →
+# không đọc trang chi tiết. ~9.700 tin = ~97 trang × 100 tin. Bỏ người liên hệ/email (sources/vietnamworks.py).
+enabled = true
+per_page = 100
+# Chạy thường: mới duyệt trước, dừng khi 2 trang liền không có tin mới; `run --full`: đọc trọn ~97 trang
+max_pages = 20
+stop_after_known_pages = 2
+min_delay_seconds = 10
+full_min_delay_seconds = 10
+# Mỗi tin có hạn nộp → còn tuyển/hết hạn theo hạn nộp, không theo "không thấy" (chạy thường chỉ đọc phần đầu)
+expire_unseen = false
+
 [sources.jobsgo]
 # TẮT 2026-11-03: lần chạy thật bị 403 challenge ngay trang đầu (khảo sát bằng curl trước đó vẫn 200).
 # Không chỉnh header/giả lập để né. Có thể thử bật lại sau vài ngày: `run --source jobsgo --max-pages 1`.

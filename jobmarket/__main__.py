@@ -30,9 +30,10 @@ from jobmarket.pipeline import (
     reapply_detail_industries,
     renormalize_salaries,
     run_paged,
+    run_search_api,
     run_topcv,
 )
-from jobmarket.sources import careerlink, careerviet, itviec, jobsgo, vieclam24h, vietjobs
+from jobmarket.sources import careerlink, careerviet, itviec, jobsgo, vieclam24h, vietjobs, vietnamworks
 from jobmarket.sources.clean_csv import import_clean_csv
 from jobmarket.store import purge
 from jobmarket.store.db import init_db
@@ -100,11 +101,14 @@ PAGED_SOURCES = {
     "careerviet": careerviet,
     "itviec": itviec,
 }
+API_SOURCES = {"vietnamworks": vietnamworks}  # API tìm kiếm JSON công khai (POST), không phải trang HTML
 
 
 def run_source(conn, cfg, client, name: str, max_pages: int | None) -> int:
     if name == "topcv":
         return run_topcv(conn, cfg, client, max_pages=max_pages)
+    if name in API_SOURCES:
+        return run_search_api(conn, cfg, client, API_SOURCES[name], max_pages=max_pages)
     return run_paged(conn, cfg, client, PAGED_SOURCES[name], max_pages=max_pages)
 
 
@@ -227,6 +231,8 @@ def full_config(cfg, names: list[str]):
         for key in FULL_IF_ENABLED:
             if int(src.get(key, 0)) > 0:
                 src[key] = UNLIMITED
+        if name in API_SOURCES:  # API: đọc mọi trang, không dừng sớm ở trang toàn tin đã biết
+            src["max_pages"], src["stop_after_known_pages"] = UNLIMITED, 0
         if src.get("full_min_delay_seconds"):
             src["min_delay_seconds"] = src["full_min_delay_seconds"]
     return dataclasses.replace(cfg, raw=raw)

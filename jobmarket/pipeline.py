@@ -648,6 +648,78 @@ def run_topcv(conn: sqlite3.Connection, cfg: Config, client: PoliteClient, max_p
     return run_id
 
 
+def run_search_api(
+    conn: sqlite3.Connection, cfg: Config, client: PoliteClient, adapter, max_pages: int | None = None
+) -> int:
+    """Nguồn có API tìm kiếm trả JSON đủ trường (VietnamWorks): duyệt trang 0, 1, 2… tới hết hoặc hết ngân sách.
+    Chạy thường: dừng sớm khi `stop_after_known_pages` trang liền không có tin mới; `--full` (max_requests rất lớn,
+    `stop_after_known_pages` bị bỏ) đọc trọn."""
+    source_cfg = cfg.source(adapter.NAME)
+    per_page = int(source_cfg.get("per_page", 100))
+    limit = max_pages or int(source_cfg.get("max_pages", 10))
+    budget = int(source_cfg.get("max_requests", cfg.crawl.get("max_requests", 50)))
+    stop_after = int(source_cfg.get("stop_after_known_pages", 0))
+    stats = RunStats()
+    scope: dict = {"mode": "search_api", "per_page": per_page}
+    with conn:
+        run_id = conn.execute(
+            "INSERT INTO runs (source, scope, started_at, app_version) VALUES (?, ?, ?, ?)",
+            (adapter.NAME, json.dumps(scope), now_iso(), __version__),
+        ).lastrowid
+    page, total_pages, known_streak = 0, None, 0
+    failures = _FailureStreak(stats, adapter.NAME)
+    try:
+        while page < min(limit, budget) and (total_pages is None or page < total_pages):
+            try:
+                text = client.post_json(adapter.SEARCH_URL, adapter.search_body(page, per_page))
+                jobs, total_pages, total = adapter.parse_search(text)
+            except (Blocked, Disallowed):
+                raise
+            except Exception as exc:  # lỗi mạng/JSON lẻ: bỏ qua trang này; 5 trang liền lỗi → dừng
+                page += 1
+                failures.fail(f"trang {page - 1}", exc)
+                continue
+            failures.ok()
+            stats.pages_fetched += 1
+            scope["total_jobs"] = total
+            before = stats.posts_new
+            with conn:
+                for job in jobs:
+                    save_job(conn, cfg, adapter.NAME, adapter.PROVIDES, job, run_id, stats)
+            progress.info("%s · trang %d/%s · %d tin mới", adapter.NAME, page + 1, total_pages, stats.posts_new)
+            known_streak = known_streak + 1 if stats.posts_new == before else 0
+            page += 1
+            if not jobs or (stop_after and known_streak >= stop_after):
+                break
+    except (Blocked, Disallowed) as exc:
+        stats.blocked = f"{type(exc).__name__}: {exc}"
+        progress.warning("Dừng nguồn (không vượt chặn): %s", stats.blocked)
+    except RuntimeError as exc:  # _FailureStreak: máy chủ lỗi liên tục
+        stats.errors.append(str(exc))
+    scope["pages"] = page
+    status = "failed" if not stats.pages_fetched else "partial" if (stats.blocked or stats.errors) else "success"
+    if status != "failed" and source_cfg.get("expire_unseen", True):
+        mark_expired(conn, adapter.NAME, int(cfg.crawl.get("expire_unseen_days", 14)))
+    with conn:
+        conn.execute(
+            """UPDATE runs SET finished_at = ?, status = ?, scope = ?, pages_fetched = ?, posts_new = ?,
+               posts_updated = ?, posts_rejected = ?, errors_count = ?, error_sample = ? WHERE id = ?""",
+            (
+                now_iso(),
+                status,
+                json.dumps(scope, ensure_ascii=False),
+                stats.pages_fetched,
+                stats.posts_new,
+                stats.posts_updated,
+                stats.posts_rejected,
+                len(stats.errors) + (1 if stats.blocked else 0),
+                json.dumps(([stats.blocked] if stats.blocked else []) + stats.errors[:5], ensure_ascii=False),
+                run_id,
+            ),
+        )
+    return run_id
+
+
 def run_paged(
     conn: sqlite3.Connection,
     cfg: Config,

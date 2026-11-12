@@ -17,6 +17,8 @@ $tag = if ($Source -eq "all") { "run_" } else { "run_" + $Source + "_" }
 $log = Join-Path $logDir ($tag + (Get-Date -Format "yyyy-MM-dd") + ".log")
 
 $env:PYTHONIOENCODING = "utf-8"
+# PowerShell 5.1 doc output cua python theo code page OEM -> tieng Viet bi loi font trong log; doc dung UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $python = Join-Path $root ".venv\Scripts\python.exe"
 $runArgs = @("-m", "jobmarket", "run", "--source", $Source)
 if ($Full) { $runArgs += "--full" }

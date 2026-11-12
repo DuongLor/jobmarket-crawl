@@ -344,3 +344,18 @@ UA trung thực, ~10 request khảo sát + 5 request chạy thử trên bản sa
   `data/backup/market-20261112-135343.db`). ⚠️ Xoá cả lịch sử lần chạy làm mất thời gian nghỉ → `start` cũ (cấu hình
   nạp trước khi tắt CareerLink) crawl lại CareerLink lúc 13:55, bị chặn sau 3 request, không lưu tin (lần chạy 44).
   Bài học: tắt mọi tiến trình đang chạy TRƯỚC khi xoá nguồn.
+
+## Lượt 15 — thêm nguồn VietnamWorks qua API tìm kiếm (2026-11-12, user cho phép)
+
+- robots.txt: `www` 404, `ms.vietnamworks.com` 404, `apiv2` 404 → không hạn chế. Trang `/viec-lam` không có tin trong
+  HTML; JS công khai gọi `POST https://ms.vietnamworks.com/job-search/v1.0/search` (body `page`, `hitsPerPage`,
+  `query`, `filter`…). Không đăng nhập/token/cookie, UA thật nhận 200.
+- 9.685 tin; `hitsPerPage` 100 → 97 trang; trang 150 (50/trang) vẫn trả tin → **không giới hạn phân trang**.
+- Mỗi tin đủ trường: lương số + tiền tệ + `isSalaryVisible`, cấp bậc (`jobLevelVI`), `yearsOfExperience` (0 = không ghi
+  rõ → để trống, không đoán), nhóm chức năng (`jobFunction.parentNameVI` = ngành, con = nghề), `workingLocations` (tỉnh
+  63 tên cũ → province_aliases), `approvedOn`/`expiredOn`, kỹ năng, mô tả + yêu cầu HTML. Có `contactName`,
+  `emailAddress` → không lưu (bản gốc chỉ giữ `_KEEP`; mô tả/yêu cầu qua `pii.scrub`).
+- Thử thật 2 trang (200 tin): dq ok 194, warn 6 (địa điểm "ĐBSCL"/"Quốc tế" — vùng, không phải tỉnh → để chưa ánh xạ);
+  mô tả/yêu cầu 200/200, khoảng kinh nghiệm 162/200; không email trong mô tả/yêu cầu. Thêm 15 alias ngành + 3 cấp bậc.
+- Chạy: `run_search_api` (pipeline) — thường: mới duyệt trước, dừng khi 2 trang liền không có tin mới; `--full`: trọn.
+  Nhịp 10 giây. Hết hạn theo `expiredOn` (expire_unseen = false).

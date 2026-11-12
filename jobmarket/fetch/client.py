@@ -82,6 +82,14 @@ class PoliteClient:
             raise Disallowed(f"{url} (robots Crawl-delay > {MAX_CRAWL_DELAY} giây)")
 
     def get(self, url: str) -> str:
+        return self._request(url, None)
+
+    def post_json(self, url: str, body: dict) -> str:
+        """POST JSON (API tìm kiếm công khai mà chính trang web gọi, không cần đăng nhập — VietnamWorks). Cùng quy tắc
+        với GET: robots.txt, giãn cách, thử lại lỗi tạm thời, dừng khi bị chặn."""
+        return self._request(url, body)
+
+    def _request(self, url: str, body: dict | None) -> str:
         self._check(url)
         for attempt in range(self.max_retries + 1):
             last_try = attempt >= self.max_retries
@@ -90,7 +98,7 @@ class PoliteClient:
             # rồi thử lại; hết lượt → ném lỗi thường để bộ chạy bỏ qua đúng trang đó (Việc Làm 24h 11/11: 1 ReadTimeout
             # từng làm dừng cả 14.700 trang sitemap còn lại).
             try:
-                resp = self._fetch_following_redirects(url)
+                resp = self._fetch_following_redirects(url, body)
             except httpx.TransportError:
                 if last_try:
                     raise
@@ -116,11 +124,11 @@ class PoliteClient:
             return body
         raise Blocked(f"retries exhausted at {url}")  # không tới được: vòng lặp luôn return/raise
 
-    def _fetch_following_redirects(self, url: str) -> httpx.Response:
+    def _fetch_following_redirects(self, url: str, body: dict | None = None) -> httpx.Response:
         current = url
         for _ in range(MAX_REDIRECTS + 1):
             self._wait_turn(urlsplit(current).netloc)
-            resp = self._client.get(current)
+            resp = self._client.get(current) if body is None else self._client.post(current, json=body)
             self.requests_made += 1
             location = resp.headers.get("location")
             if not (resp.is_redirect and location):
